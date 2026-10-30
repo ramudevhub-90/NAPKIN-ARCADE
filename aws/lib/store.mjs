@@ -136,7 +136,9 @@ export async function saveVersion(id, payload, summary, score, { publish = false
   await putVersionPayload(id, v, payload);
   await putItem({ pk: `GAME#${id}`, sk: `VERSION#${pad(v)}`, v, summary, score: score ?? null, at: new Date().toISOString() });
   const changelog = [...(meta?.changelog || []), summary].slice(-40);
-  await updateGame(id, { version: v, changelog, updatedAt: new Date().toISOString() });
+  // Games made before drafts existed have no liveVersion yet: pin the one players have now.
+  const pin = meta && meta.liveVersion == null && meta.version ? { liveVersion: meta.version } : {};
+  await updateGame(id, { version: v, changelog, updatedAt: new Date().toISOString(), ...pin });
   if (publish) await publishVersion(id, v, payload, score);
   return v;
 }
