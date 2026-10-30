@@ -11,7 +11,10 @@
 <body>
   <header class="top">
     <div class="brand"><a class="logo" href="/" aria-label="Napkin Arcade home"><img class="mark" src="/logo.svg" alt="" width="46" height="46"></a><div><h1>Napkin <b>Arcade</b></h1><p>Draw a game or describe it. An AI studio builds it in 3D — and plays it until it's fun.</p></div></div>
-    <div class="userbar"><span id="who"></span><a href="#mine" class="ub">My games</a><a href="/studio/feedback" class="ub" id="inboxLink">📬 Feedback</a><a href="/" class="ub">Home</a><button id="logout" class="ub">Sign out</button></div>
+    <div class="userbar">
+      <nav class="navpill" aria-label="Studio"><a href="#mine" class="ub"><span class="ic">🎮</span>My games</a><a href="/studio/feedback" class="ub"><span class="ic">📬</span>Feedback<span class="n hidden" id="inboxCount"></span></a><a href="/" class="ub"><span class="ic">🏠</span>Home</a></nav>
+      <div class="me" id="me" hidden><span class="av" id="avatar"></span><span class="who"><b id="who"></b><span class="builds"><i id="buildsBar"></i></span><small id="buildsText"></small></span><button id="logout" class="out" title="Sign out" aria-label="Sign out">⎋</button></div>
+    </div>
     <div class="meter"><span id="mode" class="badge">…</span></div>
   </header>
 

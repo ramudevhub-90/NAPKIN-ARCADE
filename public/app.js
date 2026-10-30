@@ -224,10 +224,13 @@ $("build").onclick = async () => {
 async function loadMe() {
   const { user } = await (await fetch("/api/auth/me")).json();
   if (!user) return location.replace("/login?next=/studio");
-  $("who").textContent = `${user.name} · ${Math.max(0, user.dailyBuilds - user.buildsToday)} of ${user.dailyBuilds} builds left today`;
+  const left = Math.max(0, user.dailyBuilds - user.buildsToday);
+  $("who").textContent = user.name; $("avatar").textContent = (user.name || "?").trim()[0].toUpperCase();
+  $("buildsText").textContent = `${left} of ${user.dailyBuilds} builds left today`; $("buildsBar").style.width = `${(100 * left) / Math.max(1, user.dailyBuilds)}%`;
+  $("me").hidden = false;
   const { projects = [] } = await (await fetch("/api/my/projects")).json();
   const newFb = projects.reduce((n, p) => n + (p.pendingFeedback || 0), 0);
-  if ($("inboxLink")) $("inboxLink").textContent = newFb ? `📬 Feedback (${newFb})` : "📬 Feedback";
+  $("inboxCount").textContent = newFb; $("inboxCount").classList.toggle("hidden", !newFb);
   if (projects.length) $("myGames").innerHTML = projects.map((p) => `<a href="${p.ready ? `/studio/game/${p.id}` : "#"}"><b>${esc(p.title || (p.status === "failed" ? "Build failed" : "Building…"))}</b><span>${esc(p.tagline || p.idea)}</span><span>${new Date(p.created).toLocaleString()}${p.ready ? ` · v${p.version}` : ""}${p.score != null ? ` · fun ${p.score}` : ""}${p.visibility === "circle" ? " · 🔒 circle only" : ""}${p.pendingFeedback ? ` · <b style="color:var(--accent)">📬 ${p.pendingFeedback} new feedback</b>` : ""}</span></a>`).join("");
   const { games: shared = [] } = await (await fetch("/api/shared")).json();
   $("shared").hidden = !shared.length;
