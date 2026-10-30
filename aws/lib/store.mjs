@@ -44,6 +44,8 @@ async function queryPrefix(pk, prefix, { limit, forward = true } = {}) {
   return out.Items || [];
 }
 
+export const listPrefix = queryPrefix; // maintenance scripts (video/demo-data.mjs)
+
 // ---- users ----
 export async function getUser(sub) { return getItem(`USER#${sub}`, "PROFILE"); }
 export async function ensureUser(sub, email, name) {

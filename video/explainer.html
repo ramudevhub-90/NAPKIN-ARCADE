@@ -31,6 +31,16 @@
   .chips { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 44px; }
   .chip { font: 600 26px Inter; border: 1px solid var(--line); border-radius: 999px; padding: 10px 22px; background: rgba(255,255,255,.05); }
   .chip.nv { border-color: rgba(118,185,0,.6); color: #b6f05a; }
+  .pipe { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; }
+  .pipe .agent b { font-size: 31px; } .pipe .agent p { font-size: 21px; }
+  .arrow { font: 600 25px Inter; color: var(--muted); margin: 20px 0 12px; letter-spacing: .02em; }
+  .gates { display: flex; gap: 14px; flex-wrap: wrap; }
+  .gate { font: 600 24px Inter; border-radius: 14px; padding: 12px 20px; background: rgba(118,185,0,.1); border: 1px solid rgba(118,185,0,.55); color: #c9f27a; opacity: 0; transform: translateY(12px); transition: all .5s ease; }
+  .gate.on { opacity: 1; transform: none; }
+  .gate.red { background: rgba(255,90,110,.1); border-color: rgba(255,90,110,.5); color: #ff9aa8; }
+  .feedback { margin-top: 24px; font: 600 24px Inter; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: var(--ink); }
+  .feedback span { background: rgba(62,240,255,.1); border: 1px solid rgba(62,240,255,.4); border-radius: 14px; padding: 9px 16px; }
+  .hack { display: inline-block; align-self: flex-start; margin-bottom: 18px; font: 700 22px Inter; letter-spacing: .1em; text-transform: uppercase; color: #b6f05a; border: 1px solid rgba(118,185,0,.6); border-radius: 999px; padding: 9px 18px; background: rgba(118,185,0,.08); }
   #cap { position: fixed; left: 0; right: 0; bottom: 0; padding: 36px 220px 48px; background: linear-gradient(180deg, transparent, rgba(4,3,10,.94) 35%); font: 500 36px/1.45 Inter; text-align: center; text-wrap: balance; color: #f6f3ff; }
 </style>
 </head>
@@ -45,6 +55,7 @@
   </section>
 
   <section class="scene studio">
+    <span class="hack">NVIDIA × Nebius hackathon</span>
     <h2>An AI game studio of NVIDIA Nemotron agents</h2>
     <div class="grid">
       <div class="agent"><div class="ic">🧠</div><b>Creative director</b><small>Nemotron 3 Ultra</small><p>Designs the game: core loop, three stages, a twist and an ending.</p></div>
@@ -59,11 +70,26 @@
     <div class="loop"><span>design</span>→<span>model</span>→<span>review</span>→<span>code</span>→<span>test</span>→<span>playtest</span>→<span>fix</span>→<span>ship</span></div>
   </section>
 
+  <section class="scene studio">
+    <span class="kicker">Agentic engineering</span>
+    <h2>Real tools and hard gates — not a single prompt</h2>
+    <div class="pipe">
+      <div class="agent"><div class="ic">🧭</div><b>Plan</b><small>Nemotron 3 Ultra</small><p>Design doc with memory of every past change to this game.</p></div>
+      <div class="agent"><div class="ic">🧑‍💻</div><b>Build</b><small>Nemotron 3 Ultra</small><p>Writes the game code and 3D models as real files.</p></div>
+      <div class="agent"><div class="ic">🧪</div><b>Test</b><small>Tools, not opinions</small><p>Linter, 15 bot players in a sandbox, a 2-player race.</p></div>
+      <div class="agent"><div class="ic">👀</div><b>See</b><small>Nemotron 3.5 Super VL</small><p>Reviews renders and plays the actual screen.</p></div>
+      <div class="agent"><div class="ic">📈</div><b>Improve</b><small>Lead + bots</small><p>Proposes fixes; keeps only measured wins.</p></div>
+    </div>
+    <div class="arrow">Ships only when every gate passes — a failure goes back to the developer with the exact error:</div>
+    <div class="gates"><span class="gate">✓ compiles &amp; lints</span><span class="gate">✓ bots finish runs</span><span class="gate">✓ 2-player race</span><span class="gate">✓ playtest notes</span><span class="gate">✓ spend cap</span><span class="gate red">✕ fail → fix → retest</span></div>
+    <div class="feedback"><span>📬 player feedback</span>→<span>owner approves</span>→<span>agents revise</span>→<span>draft</span>→<span>publish</span></div>
+  </section>
+
   <section class="scene">
-    <span class="kicker">Live now</span>
+    <span class="kicker"><img src="../public/logo.svg" alt="" style="width:34px;height:34px;vertical-align:-9px;margin-right:12px">Live now</span>
     <h1>Napkin Arcade</h1>
     <div class="url">napkinarcade.revenuerush.in</div>
-    <div class="chips"><span class="chip nv">NVIDIA Nemotron 3 Ultra · Super · Super VL · Nano</span><span class="chip">Nebius Token Factory</span><span class="chip">Real-time 3D</span><span class="chip">Multiplayer</span></div>
+    <div class="chips"><span class="chip nv">NVIDIA Nemotron 3 Ultra · Super · Super VL · Nano</span><span class="chip">Nebius Token Factory</span><span class="chip">Real-time 3D</span><span class="chip">Multiplayer &amp; tournaments</span><span class="chip">Web · iOS · Android · TV · ads</span></div>
   </section>
 
   <div id="cap"></div>
@@ -76,7 +102,7 @@
     for (let i = 0; i < R.scenes.length; i++) {
       scenes.forEach((s, k) => s.classList.toggle("on", k === R.scenes[i]));
       document.getElementById("cap").textContent = R.caps[i];
-      const agents = scenes[R.scenes[i]].querySelectorAll(".agent");
+      const agents = scenes[R.scenes[i]].querySelectorAll(".agent, .gate");
       agents.forEach((a, k) => setTimeout(() => a.classList.add("on"), 300 + k * 450));
       await new Promise((r) => setTimeout(r, R.durs[i] * 1000));
     }
