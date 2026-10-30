@@ -11,7 +11,7 @@ import { startSession, logout, me, currentUser, chargeBuild, chargeRevision, cog
 import { createRoom, handleUpgrade } from "./rooms.js";
 import * as store from "../aws/lib/store.mjs";
 import { publishStudioEvent } from "../aws/lib/appsync.mjs";
-import { sendMail, circleInviteEmail, gameSharedEmail } from "../aws/lib/mail.mjs";
+import { sendMail, circleInviteEmail, gameSharedEmail, groupInviteEmail } from "../aws/lib/mail.mjs";
 
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), "..");
 const PUBLIC = path.join(ROOT, "public");
@@ -129,13 +129,19 @@ async function body(req, limit = 4e6) {
   return JSON.parse(b || "{}");
 }
 
-const gameCard = (m) => ({ id: m.id, idea: m.idea, created: m.createdAt, by: m.ownerName || "Napkin Arcade", ready: m.status === "ready", status: m.status, version: m.version || 0, pendingFeedback: m.pendingFeedback || 0, title: m.title || null, tagline: m.tagline || "", preset: m.preset || null, score: m.score ?? null, visibility: m.visibility || "public" });
-// Circle-only games can be played by their creator and the people in the creator's circle.
+const gameCard = (m) => ({ id: m.id, idea: m.idea, created: m.createdAt, by: m.ownerName || "Napkin Arcade", ready: m.status === "ready", status: m.status, version: m.version || 0, pendingFeedback: m.pendingFeedback || 0, title: m.title || null, tagline: m.tagline || "", preset: m.preset || null, score: m.score ?? null, visibility: m.visibility || "public", groupId: m.groupId || null });
+// Private games: circle-only ones for the creator's circle, group ones for the group's members.
 async function canPlay(req, meta) {
-  if (meta.visibility !== "circle") return { ok: true };
+  const vis = meta.visibility || "public";
+  if (vis === "public") return { ok: true };
   const user = await currentUser(req);
-  return { ok: !!user && (user.sub === meta.owner || (await store.inCircle(meta.owner, user.email))), user };
+  if (!user) return { ok: false, user };
+  if (user.sub === meta.owner) return { ok: true, user };
+  if (vis === "group") return { ok: !!(await store.groupMember(meta.groupId, user.sub)), user };
+  return { ok: await store.inCircle(meta.owner, user.email), user };
 }
+const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://napkinarcade.revenuerush.in").replace(/\/$/, "");
+const inviteHits = new Map(); // sub -> timestamps (group email invites)
 const knownGame = async (req, g) => {
   if (/^example-[a-z]+$/.test(g || "")) return true;
   const meta = /^[a-z0-9]+$/.test(g || "") && (await store.getGame(g));
@@ -213,6 +219,73 @@ const server = http.createServer(async (req, res) => {
       if (!user) return json(res, 401, { error: "Please sign in." });
       return json(res, 200, { games: (await store.sharedWithMe(user.email)).map(gameCard) });
     }
+    // ---- groups: sub-communities with a join link ----
+    if (url.pathname === "/api/my/groups") {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in." });
+      const groups = (await Promise.all((await store.myGroups(user.sub)).map((l) => store.getGroup(l.gid)))).filter(Boolean);
+      return json(res, 200, { groups: groups.map((g) => ({ gid: g.gid, name: g.name, about: g.about, members: g.members || 0, owner: g.owner === user.sub, ownerName: g.ownerName })) });
+    }
+    if (url.pathname === "/api/groups" && req.method === "POST") {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in." });
+      const b = await body(req, 4e3), name = String(b.name || "").replace(/[<>]/g, "").trim().slice(0, 40), about = String(b.about || "").replace(/[<>]/g, "").trim().slice(0, 240);
+      if (name.length < 2) return json(res, 400, { error: "Give your group a name." });
+      if ((await store.myGroups(user.sub)).filter((l) => l.role === "owner").length >= 20) return json(res, 400, { error: "You can run up to 20 groups." });
+      const g = await store.createGroup(user, name, about);
+      return json(res, 200, { gid: g.gid });
+    }
+    if (parts[0] === "api" && parts[1] === "groups" && /^[a-f0-9]{10}$/.test(parts[2] || "")) {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in." });
+      const g = await store.getGroup(parts[2]), me = g && (await store.groupMember(g.gid, user.sub));
+      if (!g || !me) return json(res, 404, { error: "Group not found, or you're not a member." });
+      const owner = g.owner === user.sub;
+      if (req.method === "POST") {
+        const b = await body(req, 4e3);
+        if (b.action === "leave") {
+          if (owner) return json(res, 400, { error: "You run this group, so you can't leave it." });
+          await store.leaveGroup(g.gid, user.sub);
+          return json(res, 200, { left: true });
+        }
+        if (b.action === "remove") {
+          if (!owner) return json(res, 403, { error: "Only the group's owner can remove people." });
+          if (b.sub === user.sub) return json(res, 400, { error: "You can't remove yourself." });
+          await store.leaveGroup(g.gid, String(b.sub || ""));
+        } else if (b.action === "reset") {
+          if (!owner) return json(res, 403, { error: "Only the group's owner can reset the link." });
+          g.code = await store.resetGroupLink(g);
+        } else if (b.action === "invite") {
+          const email = String(b.email || "").trim().toLowerCase();
+          if (!EMAIL.test(email)) return json(res, 400, { error: "That doesn't look like an email address." });
+          const now = Date.now(), hits = (inviteHits.get(user.sub) || []).filter((t) => now - t < 3600e3);
+          if (hits.length >= 30) return json(res, 429, { error: "That's a lot of invites this hour. Try again later." });
+          inviteHits.set(user.sub, [...hits, now]);
+          const sent = await sendMail({ to: email, replyTo: user.email, ...groupInviteEmail({ from: user.name, to: email, group: g, joinUrl: `${PUBLIC_URL()}/g/${g.code}` }) }).then(() => true, (e) => (console.error("group invite:", e.message), false));
+          if (!sent) return json(res, 502, { error: "The invite email didn't go out. Share the link instead." });
+          return json(res, 200, { invited: email });
+        } else return json(res, 400, { error: "Unknown action." });
+      }
+      const [members, games] = await Promise.all([store.groupMembers(g.gid), store.groupGames(g.gid)]);
+      return json(res, 200, {
+        gid: g.gid, name: g.name, about: g.about, ownerName: g.ownerName, owner, joinUrl: `${PUBLIC_URL()}/g/${g.code}`,
+        members: members.map((m) => ({ sub: m.sub, name: m.name, role: m.role, at: m.at, you: m.sub === user.sub })).sort((a, b) => (a.role === "owner" ? -1 : b.role === "owner" ? 1 : a.at < b.at ? -1 : 1)),
+        games: games.map(gameCard),
+      });
+    }
+    // Join links: anyone can preview a group; signing in lets them join.
+    if (parts[0] === "api" && parts[1] === "join" && parts[2]) {
+      const g = await store.groupByCode(parts[2]);
+      if (!g) return json(res, 404, { error: "This invite link isn't valid anymore. Ask for a new one." });
+      const user = await currentUser(req);
+      if (req.method === "POST") {
+        if (!user) return json(res, 401, { error: "Please sign in to join." });
+        if ((await store.myGroups(user.sub)).length >= 100) return json(res, 400, { error: "You're in a lot of groups already (100)." });
+        await store.joinGroup(g, user);
+        return json(res, 200, { gid: g.gid });
+      }
+      return json(res, 200, { name: g.name, about: g.about, ownerName: g.ownerName, members: g.members || 0, signedIn: !!user, member: !!(user && (await store.groupMember(g.gid, user.sub))), gid: g.gid });
+    }
     if (url.pathname === "/api/gallery") return json(res, 200, { games: (await store.gallery(24)).map(gameCard) });
     if (url.pathname === "/api/scores") {
       const game = url.searchParams.get("game") || "";
@@ -263,14 +336,16 @@ const server = http.createServer(async (req, res) => {
         const meta = await store.getGame(id);
         if (meta?.status !== "ready") return json(res, 404, { error: "Game not found." });
         const { ok, user } = await canPlay(req, meta);
-        if (!ok) return json(res, 403, { error: "This game is private.", private: true, by: meta.ownerName || "its creator", signedIn: !!user, email: user?.email || null });
-        return json(res, 200, { ok: true, visibility: meta.visibility || "public", ticket: meta.visibility === "circle" ? playTicket(id) : null });
+        const group = meta.visibility === "group" ? await store.getGroup(meta.groupId) : null;
+        if (!ok) return json(res, 403, { error: "This game is private.", private: true, by: meta.ownerName || "its creator", group: group ? group.name : null, signedIn: !!user, email: user?.email || null });
+        return json(res, 200, { ok: true, visibility: meta.visibility || "public", ticket: (meta.visibility || "public") !== "public" ? playTicket(id) : null });
       }
       if (what === "visibility" && req.method === "POST") {
         const { user, meta } = await ownedGame(req, id);
-        const v = (await body(req, 1e3)).visibility;
-        if (v !== "public" && v !== "circle") return json(res, 400, { error: "Choose public or circle." });
-        await store.setVisibility(id, v);
+        const b = await body(req, 1e3), v = b.visibility;
+        if (!["public", "circle", "group"].includes(v)) return json(res, 400, { error: "Choose everyone, your circle or a group." });
+        if (v === "group" && !(await store.groupMember(String(b.groupId || ""), user.sub))) return json(res, 403, { error: "You can only share with groups you're in." });
+        await store.setVisibility(id, v, v === "group" ? b.groupId : null);
         // Newly circle-only: let the people already in the circle know.
         let notified = 0;
         if (v === "circle" && meta.visibility !== "circle") {
@@ -283,7 +358,7 @@ const server = http.createServer(async (req, res) => {
       if (what === "workshop") {
         const { meta, game } = await ownedGame(req, id);
         const [versions, chatLog, fb] = await Promise.all([store.versions(id), store.chat(id), store.feedback(id)]);
-        return json(res, 200, { id, visibility: meta.visibility || "public", title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto })), busy: !!(p && !p.done) });
+        return json(res, 200, { id, visibility: meta.visibility || "public", groupId: meta.groupId || null, title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto })), busy: !!(p && !p.done) });
       }
       if (what === "chat" && req.method === "POST") {
         const { user, meta, game } = await ownedGame(req, id);
@@ -349,7 +424,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (what === "game3d") {
         const gmeta = await store.getGame(id);
-        if (gmeta?.visibility === "circle" && !validTicket(id, url.searchParams.get("t")) && !(await canPlay(req, gmeta)).ok) return json(res, 403, { error: "This game is private." });
+        if (gmeta && (gmeta.visibility || "public") !== "public" && !validTicket(id, url.searchParams.get("t")) && !(await canPlay(req, gmeta)).ok) return json(res, 403, { error: "This game is private." });
         try { return json(res, 200, await store.getPayload(id)); } catch { return json(res, 404, { error: "This game is not ready yet." }); }
       }
       if (what === "task" && req.method === "POST" && p) {
@@ -403,6 +478,11 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/studio/feedback") {
       if (!(await currentUser(req))) { res.writeHead(302, { Location: "/login?next=/studio/feedback" }); return res.end(); }
       return page("inbox.html");
+    }
+    if (parts[0] === "g" && /^[A-Za-z0-9]{8}$/.test(parts[1] || "")) return page("join.html");
+    if (parts[0] === "studio" && parts[1] === "groups" && /^[a-f0-9]{10}$/.test(parts[2] || "")) {
+      if (!(await currentUser(req))) { res.writeHead(302, { Location: `/login?next=${encodeURIComponent(url.pathname)}` }); return res.end(); }
+      return page("group.html");
     }
     if (url.pathname === "/studio") {
       if (!(await currentUser(req))) { res.writeHead(302, { Location: "/login?next=/studio" }); return res.end(); }

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Join a group · Napkin Arcade</title>
+  <meta property="og:site_name" content="Napkin Arcade">
+  <meta property="og:title" content="You're invited to a group on Napkin Arcade">
+  <meta property="og:description" content="Make 3D games with an AI studio and race your group in them.">
+  <meta property="og:image" content="https://napkinarcade.revenuerush.in/logo-512.png">
+  <link rel="icon" href="/logo.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .joinwrap { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+    .invite { width: min(480px, 100%); text-align: center; background: var(--panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--line); border-radius: 26px; padding: 34px 28px 28px; box-shadow: 0 40px 100px rgba(0,0,0,.45), 0 0 60px rgba(255,47,160,.08); }
+    .invite .mark { width: 64px; height: 64px; filter: drop-shadow(0 10px 24px rgba(255,47,160,.45)); }
+    .eyebrow { display: inline-block; margin: 18px 0 10px; font: 12px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--blue); background: rgba(62,240,255,.08); border: 1px solid rgba(62,240,255,.25); padding: 6px 14px; border-radius: 99px; }
+    .gname { font: clamp(28px, 6vw, 38px)/1.1 var(--display); margin: 4px 0 10px; background: linear-gradient(90deg, var(--blue), var(--accent) 55%, var(--orange)); -webkit-background-clip: text; background-clip: text; color: transparent; word-break: break-word; }
+    .about { color: #d8d3ee; margin: 0 0 14px; font-size: 16px; }
+    .facts { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+    .facts span { font-size: 13px; color: var(--muted); border: 1px solid var(--line); background: rgba(255,255,255,.04); border-radius: 99px; padding: 5px 12px; }
+    .go { display: block; width: 100%; text-decoration: none; text-align: center; color: #fff; font: 18px var(--display); padding: 15px; border: 0; border-radius: 16px; background: var(--grad); box-shadow: var(--glow); cursor: pointer; transition: transform .15s; }
+    .go:hover { transform: translateY(-2px); }
+    .small { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+    .err { color: var(--red); }
+  </style>
+</head>
+<body>
+  <main class="joinwrap">
+    <div class="invite">
+      <a href="/"><img class="mark" src="/logo.svg" alt="Napkin Arcade"></a>
+      <div id="box"><p class="small">Loading the invite…</p></div>
+    </div>
+  </main>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const code = location.pathname.split("/")[2];
+    const r = await fetch(`/api/join/${code}`), g = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      $("box").innerHTML = `<span class="eyebrow">Invite link</span><h1 class="gname">Link expired</h1><p class="about err">${esc(g.error || "This invite link isn't valid.")}</p><a class="go" href="/">Go to Napkin Arcade</a>`;
+    } else {
+      document.title = `Join ${g.name} · Napkin Arcade`;
+      const action = g.member ? `<a class="go" href="/studio/groups/${g.gid}">Open the group →</a>`
+        : g.signedIn ? `<button class="go" id="join">Join the group</button>`
+        : `<a class="go" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in to join</a>`;
+      $("box").innerHTML = `<span class="eyebrow">${g.member ? "You're a member" : "You're invited"}</span>
+        <h1 class="gname">${esc(g.name)}</h1>${g.about ? `<p class="about">${esc(g.about)}</p>` : ""}
+        <div class="facts"><span>👥 ${g.members} ${g.members === 1 ? "member" : "members"}</span><span>Run by ${esc(g.ownerName)}</span></div>
+        ${action}<p class="small" id="note">${g.signedIn || g.member ? "Members play the group's private games and race each other." : "New here? Signing in takes a 6-digit email code — no password."}</p>`;
+      $("join")?.addEventListener("click", async (e) => {
+        e.target.disabled = true; e.target.textContent = "Joining…";
+        const j = await fetch(`/api/join/${code}`, { method: "POST" }), out = await j.json().catch(() => ({}));
+        if (j.ok) return location.replace(`/studio/groups/${out.gid}`);
+        $("note").innerHTML = `<span class="err">${esc(out.error || "Couldn't join.")}</span>`; e.target.disabled = false; e.target.textContent = "Join the group";
+      });
+    }
+  </script>
+</body>
+</html>

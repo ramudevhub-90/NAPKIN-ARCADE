@@ -98,10 +98,12 @@ function renderVersions() {
   }).join("");
 }
 // ---------- who can play: everyone, or my circle ----------
-let members = null;
+let members = null, groups = null;
 function renderShare() {
   document.querySelectorAll('input[name="vis"]').forEach((r) => (r.checked = r.value === state.visibility));
   $("circleBox").hidden = state.visibility !== "circle";
+  if (!groups) fetch("/api/my/groups").then((r) => r.json()).then((j) => { groups = j.groups || []; renderGroups(); });
+  else renderGroups();
   if (state.visibility === "circle" && !members) loadCircle();
 }
 function renderMembers() {
@@ -116,16 +118,25 @@ async function loadCircle(change) {
   if (j.invited === true) $("shareNote").textContent = `✉️ Invite emailed to ${change.email}.`;
   if (j.invited === false) $("shareNote").textContent = `Added ${change.email}, but the invite email didn't go out — send them the ▶ Play link.`;
 }
-document.querySelectorAll('input[name="vis"]').forEach((r) => (r.onchange = async () => {
+function renderGroups() {
+  $("groupPick").innerHTML = groups.length ? groups.map((g) => `<option value="${g.gid}">👥 ${esc(g.name)} · ${g.members} ${g.members === 1 ? "member" : "members"}</option>`).join("") : '<option value="">You aren\'t in any groups yet — create one in the Studio</option>';
+  $("groupPick").disabled = !groups.length;
+  if (state.groupId) $("groupPick").value = state.groupId;
+}
+async function setVisibility(v) {
   $("shareErr").textContent = "";
   $("shareNote").textContent = "";
+  if (v === "group" && !$("groupPick").value) { $("shareErr").textContent = "Create a group first (Studio → Groups), then share the game with it."; return renderShare(); }
   try {
-    const j = await post(`/api/projects/${id}/visibility`, { visibility: r.value });
-    state.visibility = r.value;
+    const j = await post(`/api/projects/${id}/visibility`, { visibility: v, groupId: v === "group" ? $("groupPick").value : undefined });
+    state.visibility = v; state.groupId = v === "group" ? $("groupPick").value : null;
+    if (v === "group") $("shareNote").textContent = `👥 Only members of ${groups.find((g) => g.gid === state.groupId)?.name || "the group"} can play this game now.`;
     if (j.notified) $("shareNote").textContent = `✉️ Emailed ${j.notified} ${j.notified === 1 ? "person" : "people"} in your circle about this game.`;
   } catch (err) { $("shareErr").textContent = err.message; }
   renderShare();
-}));
+}
+document.querySelectorAll('input[name="vis"]').forEach((r) => (r.onchange = () => setVisibility(r.value)));
+$("groupPick").onchange = () => { if (state.visibility === "group" || document.querySelector('input[name="vis"][value="group"]').checked) setVisibility("group"); };
 $("circleAdd").onsubmit = async (e) => { e.preventDefault(); await loadCircle({ email: $("circleEmail").value }); if (!$("shareErr").textContent) $("circleEmail").value = ""; };
 $("members").onclick = (e) => { const b = e.target.closest("[data-unshare]"); if (b && confirm(`Remove ${b.dataset.unshare} from your circle? They'll lose access to all your circle-only games.`)) loadCircle({ email: b.dataset.unshare, remove: true }); };
 

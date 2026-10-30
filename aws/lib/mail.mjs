@@ -110,3 +110,24 @@ export function gameSharedEmail({ from, to, game }) {
     text: `${from} shared "${game.title || "a new game"}" with their circle.\n\nPlay: ${site}/play/${game.id}\nSign in with ${to}.\n`,
   };
 }
+// "Join my group": a sub-community on Napkin Arcade, joined with a link.
+export function groupInviteEmail({ from, to, group, joinUrl }) {
+  const members = group.members || 1;
+  return {
+    subject: `${from} invited you to join “${group.name}” on Napkin Arcade`,
+    html: layout({
+      preheader: group.about || `${members} ${members === 1 ? "member" : "members"} making and playing games together.`,
+      body: h1(`Join “${esc(group.name)}” 👥`) +
+        p(`${esc(from)} invited you to their group on Napkin Arcade, where you draw or describe a game and an AI studio builds it in 3D.`) +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;border:1px solid ${BRAND.line};border-radius:14px"><tr><td style="padding:14px 16px">
+          <div style="font:800 17px ${FONT};color:${BRAND.ink}">👥 ${esc(group.name)}</div>
+          ${group.about ? `<div style="font:14px/1.45 ${FONT};color:${BRAND.muted};margin-top:4px">${esc(group.about)}</div>` : ""}
+          <div style="font:13px ${FONT};color:${BRAND.muted};margin-top:8px">${members} ${members === 1 ? "member" : "members"} · run by ${esc(group.ownerName || from)}</div>
+        </td></tr></table>` +
+        `<div style="margin:22px 0 18px">${button(joinUrl, "Join the group")}</div>` +
+        p(`Members play the group's private games and race each other. Sign in with <b>${esc(to)}</b> or any email — we'll send you a 6-digit code, no password needed.`, `font-size:14px;color:${BRAND.muted}`),
+      footer: `${esc(from)} invited ${esc(to)} to a Napkin Arcade group. Reply to this email to reach them.`,
+    }),
+    text: `${from} invited you to join "${group.name}" on Napkin Arcade.\n${group.about ? group.about + "\n" : ""}\nJoin: ${joinUrl}\n`,
+  };
+}

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Group · Napkin Arcade</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .gwrap { max-width: 1100px; margin: 0 auto; padding: 22px 20px 48px; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; }
+    .card { background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 22px; padding: 20px; min-width: 0; box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+    .hero { grid-column: 1 / -1; position: relative; overflow: hidden; }
+    .hero::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--grad); }
+    .hero h1 { font-size: clamp(28px, 4.5vw, 42px); margin: 6px 0 8px; background: linear-gradient(90deg, var(--blue), var(--accent) 55%, var(--orange)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero p { margin: 0 0 12px; color: #d8d3ee; font-size: 16px; max-width: 760px; }
+    .facts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .facts span { font-size: 13px; color: var(--muted); border: 1px solid var(--line); background: rgba(255,255,255,.04); border-radius: 99px; padding: 5px 12px; }
+    .linkrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+    .link { font: 600 13.5px ui-monospace, Menlo, monospace; color: var(--blue); background: rgba(62,240,255,.06); border: 1px solid rgba(62,240,255,.25); border-radius: 12px; padding: 11px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; font: 700 14px Inter, sans-serif; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); cursor: pointer; white-space: nowrap; }
+    .btn.primary { background: var(--grad); border: 0; color: #fff; box-shadow: var(--glow); }
+    .btn.danger:hover { background: rgba(255,90,110,.18); border-color: rgba(255,90,110,.5); }
+    .invite { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 12px; }
+    .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; min-height: 18px; } .note.ok { color: var(--green); } .note.err { color: var(--red); }
+    .members { display: grid; gap: 6px; }
+    .members div { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 14px; background: rgba(255,255,255,.04); border: 1px solid transparent; }
+    .members div:hover { border-color: var(--line); }
+    .av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #fff; font: 15px var(--display); }
+    .members b { font-weight: 700; } .members small { display: block; color: var(--muted); font-size: 12px; }
+    .members button { font-size: 12px; padding: 5px 10px; }
+    .tag { font: 700 10.5px Inter, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--amber); border: 1px solid rgba(255,210,63,.45); border-radius: 99px; padding: 2px 8px; margin-left: 6px; }
+    .empty { color: var(--muted); font-size: 14px; margin: 0; }
+    .side { display: grid; gap: 18px; align-content: start; }
+    @media (max-width: 900px) { .gwrap { grid-template-columns: 1fr; } .linkrow { grid-template-columns: 1fr 1fr; } .link { grid-column: 1 / -1; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><a class="logo" href="/" aria-label="Napkin Arcade home"><img class="mark" src="/logo.svg" alt="" width="46" height="46"></a><div><h1>Group</h1><p>Your sub-community: share games with its members and race each other.</p></div></div>
+    <div class="userbar"><nav class="navpill" aria-label="Studio"><a href="/studio#mine" class="ub"><span class="ic">🎮</span>My games</a><a href="/studio#groups" class="ub"><span class="ic">👥</span>Groups</a><a href="/studio/feedback" class="ub"><span class="ic">📬</span>Feedback</a></nav><a href="/studio" class="newgame">＋ New game</a></div>
+  </header>
+  <main class="gwrap" id="page">
+    <section class="card hero"><p class="empty">Loading the group…</p></section>
+  </main>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const gid = location.pathname.split("/")[3];
+    const act = async (body) => {
+      const r = await fetch(`/api/groups/${gid}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Something went wrong");
+      return j;
+    };
+    let g = null;
+    async function load() {
+      const r = await fetch(`/api/groups/${gid}`);
+      if (r.status === 401) return location.replace(`/login?next=${encodeURIComponent(location.pathname)}`);
+      g = await r.json();
+      if (!r.ok) { $("page").innerHTML = `<section class="card hero"><h1>Not found</h1><p>${esc(g.error)}</p><a class="btn" href="/studio#groups">← Your groups</a></section>`; return; }
+      document.title = `${g.name} · Napkin Arcade`;
+      const games = g.games.length ? `<div class="mygames">${g.games.map((x) => `<a href="/play/${x.id}"><b>${esc(x.title || "Untitled game")}</b><span>${esc(x.tagline)}</span><span>by ${esc(x.by)}${x.score != null ? ` · fun ${x.score}` : ""}</span></a>`).join("")}</div>`
+        : `<p class="empty">No games here yet. Share one: open a game's workshop → <b>Who can play</b> → <b>👥 A group</b> → ${esc(g.name)}.</p>`;
+      $("page").innerHTML = `
+        <section class="card hero"><span class="facts"><span>👥 Group</span></span><h1>${esc(g.name)}</h1>${g.about ? `<p>${esc(g.about)}</p>` : ""}
+          <div class="facts"><span>${g.members.length} ${g.members.length === 1 ? "member" : "members"}</span><span>Run by ${esc(g.ownerName)}</span><span>${g.games.length} ${g.games.length === 1 ? "game" : "games"}</span></div></section>
+        <section class="card"><h2>Group games</h2>${games}</section>
+        <div class="side">
+          <section class="card"><h2>Invite people</h2>
+            <p class="empty" style="margin-bottom:10px">Anyone with this link can join the group.</p>
+            <div class="linkrow"><span class="link" id="link">${esc(g.joinUrl)}</span><button class="btn primary" id="copy">Copy</button><button class="btn" id="share">Share</button></div>
+            <form class="invite" id="inviteForm"><input type="email" id="inviteEmail" placeholder="friend@example.com" required><button class="btn">✉️ Email invite</button></form>
+            <p class="note" id="inviteNote"></p>
+            ${g.owner ? `<button class="btn danger" id="reset" style="margin-top:6px;font-size:12.5px">↻ Reset link</button>` : ""}
+          </section>
+          <section class="card"><h2>Members</h2><div class="members">${g.members.map((m) => `<div><span class="av">${esc((m.name || "?").trim()[0].toUpperCase())}</span><span><b>${esc(m.name)}${m.you ? " (you)" : ""}</b>${m.role === "owner" ? '<span class="tag">Owner</span>' : ""}<small>joined ${new Date(m.at).toLocaleDateString()}</small></span>${g.owner && m.role !== "owner" ? `<button class="btn danger" data-remove="${esc(m.sub)}" data-name="${esc(m.name)}">Remove</button>` : "<span></span>"}</div>`).join("")}</div>
+            ${g.owner ? "" : `<button class="btn danger" id="leave" style="margin-top:12px">Leave group</button>`}</section>
+        </div>`;
+      $("copy").onclick = async () => { try { await navigator.clipboard.writeText(g.joinUrl); $("copy").textContent = "Copied ✓"; setTimeout(() => ($("copy").textContent = "Copy"), 1600); } catch { $("inviteNote").textContent = g.joinUrl; } };
+      $("share").onclick = async () => { if (navigator.share) { try { await navigator.share({ title: `Join ${g.name} on Napkin Arcade`, text: g.about || `Join my group on Napkin Arcade`, url: g.joinUrl }); } catch {} } else $("copy").click(); };
+      $("inviteForm").onsubmit = async (e) => {
+        e.preventDefault(); const n = $("inviteNote"); n.className = "note"; n.textContent = "Sending…";
+        try { const j = await act({ action: "invite", email: $("inviteEmail").value }); n.className = "note ok"; n.textContent = `✉️ Invite sent to ${j.invited}.`; $("inviteEmail").value = ""; }
+        catch (err) { n.className = "note err"; n.textContent = err.message; }
+      };
+      $("reset")?.addEventListener("click", async () => { if (!confirm("Reset the invite link? The current link stops working; people already in the group stay.")) return; try { await act({ action: "reset" }); await load(); $("inviteNote").className = "note ok"; $("inviteNote").textContent = "New link ready — the old one no longer works."; } catch (err) { alert(err.message); } });
+      $("leave")?.addEventListener("click", async () => { if (!confirm(`Leave ${g.name}? Your games shared here become circle-only.`)) return; try { await act({ action: "leave" }); location.href = "/studio#groups"; } catch (err) { alert(err.message); } });
+      document.querySelectorAll("[data-remove]").forEach((b) => (b.onclick = async () => { if (!confirm(`Remove ${b.dataset.name} from the group?`)) return; try { await act({ action: "remove", sub: b.dataset.remove }); await load(); } catch (err) { alert(err.message); } }));
+    }
+    load();
+  </script>
+</body>
+</html>

@@ -135,7 +135,8 @@
       const j = await r.json().catch(() => ({}));
       if (r.ok) return (g.src = frameSrc(j.ticket));
       $("lockTitle").textContent = j.private ? "🔒 Private game" : "Game not found";
-      $("lockText").textContent = !j.private ? "This game doesn't exist or isn't ready yet." : j.signedIn ? `${j.by} shared this game with their circle only, and ${j.email} isn't in it yet. Ask them to add you, or sign in with the email they invited.` : `${j.by} shared this game with their circle only. Sign in with the email they invited to play.`;
+      const who = j.group ? `members of the “${j.group}” group` : `${j.by}'s circle`;
+      $("lockText").textContent = !j.private ? "This game doesn't exist or isn't ready yet." : j.signedIn ? `This game is only for ${who}, and ${j.email} isn't in it yet. ${j.group ? "Ask a member for the group's join link." : "Ask them to add you, or sign in with the email they invited."}` : `This game is only for ${who}. Sign in to play${j.group ? " — or ask a member for the group's join link" : " with the email they invited"}.`;
       $("lockSignIn").href = `/login?next=${encodeURIComponent(location.pathname + location.search)}${j.signedIn ? "&switch=1" : ""}`;
       $("lockSignIn").textContent = j.signedIn ? "Use a different email" : "Sign in to play";
       $("lockSignIn").classList.toggle("hidden", !j.private);

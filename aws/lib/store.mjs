@@ -2,6 +2,11 @@
 //   USER#<sub>      PROFILE                 email, name, build/revision counters
 //   USER#<sub>      CIRCLE#<email>          someone the creator shares circle-only games with
 //   MEMBER#<email>  OWNER#<sub>             reverse link: whose circles this email is in
+//   GROUP#<gid>     META                    name, about, owner, code (join link), members count
+//   GROUP#<gid>     MEMBER#<sub>            name, email, role (owner | member)
+//   GROUP#<gid>     GAME#<id>               a game shared with the group
+//   USER#<sub>      GROUP#<gid>             the groups a person belongs to
+//   JOIN#<code>     GROUP                   join-link lookup
 //   GAME#<id>       META                    owner, title, version, status, visibility, changelog… (GSI1: OWNER#<sub>, GSI2: GALLERY when public)
 //   GAME#<id>       VERSION#0001            summary, score, at (payload in S3: games/<id>/v1.json)
 //   GAME#<id>       CHAT#<ts>#<rand>        role, text, version…
@@ -66,7 +71,7 @@ export const countToday = (u, kind) => (u?.[`${kind}Day`] === today() ? u[`${kin
 export const getGame = (id) => getItem(`GAME#${id}`, "META");
 export async function putGameMeta(meta) {
   const item = { ...meta, pk: `GAME#${meta.id}`, sk: "META", GSI1PK: `OWNER#${meta.owner}`, GSI1SK: meta.createdAt };
-  if (meta.status === "ready" && !meta.hidden && meta.visibility !== "circle") { item.GSI2PK = "GALLERY"; item.GSI2SK = meta.createdAt; }
+  if (meta.status === "ready" && !meta.hidden && (meta.visibility || "public") === "public") { item.GSI2PK = "GALLERY"; item.GSI2SK = meta.createdAt; }
   await putItem(item);
   return item;
 }
@@ -75,10 +80,14 @@ export async function updateGame(id, fields) {
   for (const [k, v] of Object.entries(fields)) { names[`#${k}`] = k; values[`:${k}`] = v; sets.push(`#${k} = :${k}`); }
   await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `GAME#${id}`, sk: "META" }, UpdateExpression: `SET ${sets.join(", ")}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
 }
-// Who can play: "public" (everyone, listed in the gallery) or "circle" (the creator's circle only).
-export async function setVisibility(id, visibility) {
+// Who can play: "public" (everyone, listed in the gallery), "circle" (the creator's circle only)
+// or "group" (members of one group).
+export async function setVisibility(id, visibility, groupId = null) {
   const { pk, sk, GSI1PK, GSI1SK, GSI2PK, GSI2SK, ...meta } = await getGame(id);
-  await putGameMeta({ ...meta, visibility });
+  if (meta.groupId && meta.groupId !== groupId) await deleteItem(`GROUP#${meta.groupId}`, `GAME#${id}`);
+  if (visibility === "group") await putItem({ pk: `GROUP#${groupId}`, sk: `GAME#${id}`, id, owner: meta.owner, at: new Date().toISOString() });
+  const { groupId: _, ...rest } = meta;
+  await putGameMeta({ ...rest, visibility, ...(visibility === "group" ? { groupId } : {}) });
 }
 export async function myGames(sub) {
   const out = await db.send(new QueryCommand({ TableName: TABLE, IndexName: "GSI1", KeyConditionExpression: "GSI1PK = :p", ExpressionAttributeValues: { ":p": `OWNER#${sub}` }, ScanIndexForward: false, Limit: 50 }));
@@ -126,6 +135,53 @@ export async function sharedWithMe(email) {
   const links = await queryPrefix(`MEMBER#${email.toLowerCase()}`, "OWNER#");
   const lists = await Promise.all(links.map(async (l) => (await myGames(l.ownerSub)).filter((m) => m.status === "ready" && m.visibility === "circle").map((m) => ({ ...m, ownerName: m.ownerName || l.ownerName }))));
   return lists.flat();
+}
+
+// ---- groups: sub-communities people join with a link ----
+const joinCode = () => crypto.randomBytes(6).toString("base64url").replace(/[-_]/g, "x").slice(0, 8);
+export const getGroup = (gid) => getItem(`GROUP#${gid}`, "META");
+export const groupMember = (gid, sub) => (sub ? getItem(`GROUP#${gid}`, `MEMBER#${sub}`) : null);
+export const groupMembers = (gid) => queryPrefix(`GROUP#${gid}`, "MEMBER#");
+export const myGroups = (sub) => queryPrefix(`USER#${sub}`, "GROUP#");
+export async function groupByCode(code) {
+  const link = /^[A-Za-z0-9]{8}$/.test(code || "") && (await getItem(`JOIN#${code}`, "GROUP"));
+  const g = link && (await getGroup(link.gid));
+  return g && g.code === code ? g : null; // a reset link stops working
+}
+export async function createGroup(owner, name, about) {
+  const gid = newId(5), code = joinCode(), at = new Date().toISOString();
+  const g = { pk: `GROUP#${gid}`, sk: "META", gid, name, about, owner: owner.sub, ownerName: owner.name, code, members: 0, createdAt: at };
+  await putItem(g);
+  await putItem({ pk: `JOIN#${code}`, sk: "GROUP", gid });
+  await joinGroup(g, owner, "owner");
+  return { ...g, members: 1 };
+}
+export async function joinGroup(g, user, role = "member") {
+  if (await groupMember(g.gid, user.sub)) return false;
+  const at = new Date().toISOString();
+  await putItem({ pk: `GROUP#${g.gid}`, sk: `MEMBER#${user.sub}`, sub: user.sub, name: user.name, email: user.email, role, at });
+  await putItem({ pk: `USER#${user.sub}`, sk: `GROUP#${g.gid}`, gid: g.gid, name: g.name, role, at });
+  await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `GROUP#${g.gid}`, sk: "META" }, UpdateExpression: "ADD members :one", ExpressionAttributeValues: { ":one": 1 } }));
+  return true;
+}
+export async function leaveGroup(gid, sub) {
+  if (!(await groupMember(gid, sub))) return;
+  await deleteItem(`GROUP#${gid}`, `MEMBER#${sub}`);
+  await deleteItem(`USER#${sub}`, `GROUP#${gid}`);
+  await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `GROUP#${gid}`, sk: "META" }, UpdateExpression: "ADD members :m", ExpressionAttributeValues: { ":m": -1 } }));
+  // Their games leave the group with them (back to their circle, still private).
+  for (const link of await queryPrefix(`GROUP#${gid}`, "GAME#")) if (link.owner === sub) await setVisibility(link.id, "circle");
+}
+export async function resetGroupLink(g) {
+  const code = joinCode();
+  await putItem({ pk: `JOIN#${code}`, sk: "GROUP", gid: g.gid });
+  await deleteItem(`JOIN#${g.code}`, "GROUP");
+  await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `GROUP#${g.gid}`, sk: "META" }, UpdateExpression: "SET code = :c", ExpressionAttributeValues: { ":c": code } }));
+  return code;
+}
+export async function groupGames(gid) {
+  const metas = await Promise.all((await queryPrefix(`GROUP#${gid}`, "GAME#")).map((l) => getGame(l.id)));
+  return metas.filter((m) => m && m.status === "ready" && m.visibility === "group" && m.groupId === gid);
 }
 
 // ---- versions / chat / feedback ----
