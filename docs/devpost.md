@@ -9,7 +9,7 @@ Draw a game on a napkin. An AI studio of NVIDIA Nemotron agents builds it in 3D,
 
 **Links**
 - Live app: https://napkinarcade.revenuerush.in
-- Demo video: https://youtu.be/aGX1owDcOKo
+- Demo video: https://youtu.be/YbJqdClW9cE
 - Code (MIT): https://github.com/ramudevhub-90/NAPKIN-ARCADE
 - A game built in the video: https://napkinarcade.revenuerush.in/play/d91b2502
 

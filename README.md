@@ -4,10 +4,10 @@
 
 **Draw a game on a napkin — or describe it in one sentence. An AI game studio of NVIDIA Nemotron agents designs it, builds it in 3D, writes the code, playtests it with vision, and only ships it once it's fun. Then share a link and race your friends.**
 
-[![Napkin Arcade demo video](docs/thumbnail.png)](https://youtu.be/aGX1owDcOKo)
+[![Napkin Arcade demo video](docs/thumbnail.png)](https://youtu.be/YbJqdClW9cE)
 
 - **Live app:** https://napkinarcade.revenuerush.in
-- **Demo video (2:14):** https://youtu.be/aGX1owDcOKo
+- **Demo video (3:17):** https://youtu.be/YbJqdClW9cE
 - **A game built in the video:** https://napkinarcade.revenuerush.in/play/d91b2502
 - **Free arcade (no sign-in):** https://napkinarcade.revenuerush.in/arcade
 
