@@ -12,7 +12,7 @@ TMP=$(mktemp -d)
 COPYFILE_DISABLE=1 tar --no-mac-metadata -czf "$TMP/game.tgz" -C data/projects --exclude drawing.txt "$ID"
 aws s3 cp "$TMP/game.tgz" "s3://$BUCKET/games/$ID.tgz" --only-show-errors
 CMD=$(aws ssm send-command --instance-ids "$IID" --document-name AWS-RunShellScript \
-  --parameters "commands=[\"aws s3 cp s3://$BUCKET/games/$ID.tgz /tmp/g.tgz --region $REGION --only-show-errors\",\"mkdir -p /opt/napkin-arcade/data/projects\",\"tar -xzf /tmp/g.tgz -C /opt/napkin-arcade/data/projects\",\"chown -R napkin:napkin /opt/napkin-arcade/data\"]" \
+  --parameters "commands=[\"aws s3 cp s3://$BUCKET/games/$ID.tgz /var/tmp/g.tgz --region $REGION --only-show-errors\",\"mkdir -p /opt/napkin-arcade/data/projects\",\"tar -xzf /var/tmp/g.tgz -C /opt/napkin-arcade/data/projects\",\"chown -R napkin:napkin /opt/napkin-arcade/data\"]" \
   --query Command.CommandId --output text)
 aws ssm wait command-executed --command-id "$CMD" --instance-id "$IID"
 rm -rf "$TMP"

@@ -65,6 +65,7 @@
         $("step1").classList.add("hidden"); $("step2").classList.remove("hidden");
         $("sentTo").textContent = `We sent a code to ${$("email").value.trim()}.`;
         $("nameBox").classList.toggle("hidden", !j.newUser);
+        if (j.demo) { $("sentTo").textContent = "Judge account: enter the judge access code from the submission."; }
         say(j.mail === "dev" ? "Dev mode: the code is printed in the server log." : "");
         ($("nameBox").classList.contains("hidden") ? $("code") : $("name")).focus();
       } catch (err) { say(err.message, true); }

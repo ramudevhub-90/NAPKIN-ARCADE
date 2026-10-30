@@ -18,7 +18,7 @@ out() { aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks
 BUCKET=$(out Bucket); IID=$(out InstanceId); IP=$(out PublicIp); NS=$(out NameServers); ZONE=$(out ZoneId)
 
 echo "▶ App settings → SSM Parameter Store (encrypted; never in git)…"
-ENV_BODY=$({ grep -E '^(NEBIUS_API_KEY|NEBIUS_BASE_URL|MODEL_[A-Z]+|HARD_CAP_USD|CAMPAIGN_CAP_USD|LIVE_RUNS_PER_HOUR|DAILY_BUILDS_PER_USER)=' .env || true
+ENV_BODY=$({ grep -E '^(NEBIUS_API_KEY|NEBIUS_BASE_URL|MODEL_[A-Z]+|HARD_CAP_USD|CAMPAIGN_CAP_USD|LIVE_RUNS_PER_HOUR|DAILY_BUILDS_PER_USER|DEMO_LOGIN_EMAIL|DEMO_LOGIN_CODE|DEMO_DAILY_BUILDS)=' .env || true
   echo "MAIL_PROVIDER=ses"; echo "AWS_REGION=$REGION"
   if [ -n "${SES_ROLE_ARN:-}" ]; then echo "SES_ROLE_ARN=$SES_ROLE_ARN"; echo "MAIL_FROM=Napkin Arcade <${MAIL_FROM_ADDRESS:-no-reply@revenuerush.in}>"; echo "SES_REGION=${SES_REGION:-$REGION}";
   else echo "MAIL_FROM=Napkin Arcade <no-reply@$DOMAIN>"; fi; })
@@ -27,7 +27,9 @@ aws ssm put-parameter --name /napkin-arcade/env --type SecureString --overwrite 
 echo "▶ Bundling and uploading the app…"
 VER=$(date +%Y%m%d%H%M%S)
 TMP=$(mktemp -d)
-COPYFILE_DISABLE=1 tar --no-mac-metadata --exclude ./node_modules --exclude ./data --exclude ./.env --exclude ./deploy --exclude ./.git -czf "$TMP/app.tgz" .
+COPYFILE_DISABLE=1 tar --no-mac-metadata --exclude ./node_modules --exclude ./data --exclude ./.env --exclude ./deploy --exclude ./.git \
+  --exclude ./video --exclude ./docs --exclude ./test -czf "$TMP/app.tgz" .
+echo "  bundle: $(du -h "$TMP/app.tgz" | cut -f1)"
 aws s3 cp "$TMP/app.tgz" "s3://$BUCKET/releases/$VER.tgz" --only-show-errors
 
 echo "▶ Installing on $IID via Systems Manager…"
@@ -36,10 +38,11 @@ const [bucket, ver, region] = process.argv.slice(1);
 const cmds = [
   "set -euo pipefail",
   "cloud-init status --wait >/dev/null || true",
-  `aws s3 cp s3://${bucket}/releases/${ver}.tgz /tmp/app.tgz --region ${region} --only-show-errors`,
+  "rm -f /tmp/app.tgz /tmp/g.tgz",
+  `aws s3 cp s3://${bucket}/releases/${ver}.tgz /var/tmp/app.tgz --region ${region} --only-show-errors`,
   "mkdir -p /opt/napkin-arcade/data",
   "find /opt/napkin-arcade -mindepth 1 -maxdepth 1 ! -name data ! -name node_modules -exec rm -rf {} +",
-  "tar -xzf /tmp/app.tgz -C /opt/napkin-arcade",
+  "tar -xzf /var/tmp/app.tgz -C /opt/napkin-arcade && rm -f /var/tmp/app.tgz",
   "cd /opt/napkin-arcade && PATH=/opt/node/bin:$PATH npm ci --omit=dev --no-audit --no-fund --loglevel=error",
   `aws ssm get-parameter --name /napkin-arcade/env --with-decryption --region ${region} --query Parameter.Value --output text > /etc/napkin-arcade.env`,
   "chmod 600 /etc/napkin-arcade.env && chown -R napkin:napkin /opt/napkin-arcade",
@@ -56,7 +59,12 @@ done
 CMD=$(aws ssm send-command --instance-ids "$IID" --document-name AWS-RunShellScript --timeout-seconds 900 \
   --parameters "file://$TMP/params.json" --comment "napkin-arcade $VER" --query Command.CommandId --output text)
 aws ssm wait command-executed --command-id "$CMD" --instance-id "$IID" 2>/dev/null || true
-aws ssm get-command-invocation --command-id "$CMD" --instance-id "$IID" --query '[Status,StandardOutputContent,StandardErrorContent]' --output text | tail -25
+for i in $(seq 1 90); do
+  STATUS=$(aws ssm get-command-invocation --command-id "$CMD" --instance-id "$IID" --query Status --output text 2>/dev/null || echo Pending)
+  case "$STATUS" in Pending|InProgress|Delayed) sleep 5 ;; *) break ;; esac
+done
+aws ssm get-command-invocation --command-id "$CMD" --instance-id "$IID" --query '[StandardOutputContent,StandardErrorContent]' --output text | tail -15
+[ "$STATUS" = "Success" ] || { echo "✖ Install on the instance failed (status: $STATUS)"; exit 1; }
 
 echo "▶ DNS…"
 PARENT_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$PARENT" --query "HostedZones[?Name=='$PARENT.'].Id" --output text | head -1)

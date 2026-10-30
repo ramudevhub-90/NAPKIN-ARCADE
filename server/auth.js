@@ -16,7 +16,7 @@ export const DAILY_BUILDS = +(process.env.DAILY_BUILDS_PER_USER || 5);
 
 const today = () => new Date().toISOString().slice(0, 10);
 const buildsToday = (u) => (u.builds || []).filter((d) => d === today()).length;
-const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, buildsToday: buildsToday(u), dailyBuilds: DAILY_BUILDS };
+const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, buildsToday: buildsToday(u), dailyBuilds: isDemo(u.email) ? demoDailyBuilds : DAILY_BUILDS };
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status });
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const normEmail = (e) => String(e || "").trim().toLowerCase();
@@ -54,8 +54,14 @@ async function sendCode(email, code) {
   console.log(`[dev mail] sign-in code for ${email}: ${code}`);
 }
 
+// Optional judge/demo account: a fixed access code for one email (set only in server env, never in git).
+const DEMO_EMAIL = normEmail(process.env.DEMO_LOGIN_EMAIL), DEMO_CODE = String(process.env.DEMO_LOGIN_CODE || "");
+const isDemo = (email) => DEMO_EMAIL && DEMO_CODE.length >= 6 && email === DEMO_EMAIL;
+const demoDailyBuilds = +(process.env.DEMO_DAILY_BUILDS || 25);
+
 export async function requestCode({ email }) {
   email = normEmail(email);
+  if (isDemo(email)) return { sent: true, newUser: false, mail: mailMode, demo: true }; // judges use the shared access code
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw bad("Please enter a valid email.");
   const now = Date.now(), prev = otps.get(email);
   const sent = (prev?.sent || []).filter((t) => now - t < 3600e3);
@@ -69,6 +75,10 @@ export async function requestCode({ email }) {
 
 export function verifyCode(res, { email, code, name }) {
   email = normEmail(email);
+  if (isDemo(email)) {
+    if (String(code || "").trim() !== DEMO_CODE) throw bad("Wrong code. Check the judge access code and try again.", 401);
+    otps.set(email, { hash: sha(email + DEMO_CODE), expires: Date.now() + 60e3, tries: 0, sent: [] });
+  }
   const o = otps.get(email);
   if (!o || Date.now() > o.expires) throw bad("That code expired. Ask for a new one.", 401);
   if (++o.tries > 5) { otps.delete(email); throw bad("Too many wrong attempts. Ask for a new code.", 429); }
@@ -104,7 +114,8 @@ export const me = (req) => publicUser(currentUser(req));
 
 // Throws if the user may not start another build today; otherwise records it.
 export function chargeBuild(user) {
-  if (buildsToday(user) >= DAILY_BUILDS) throw bad(`You've used today's ${DAILY_BUILDS} game builds. Come back tomorrow!`, 429);
+  const limit = isDemo(user.email) ? demoDailyBuilds : DAILY_BUILDS;
+  if (buildsToday(user) >= limit) throw bad(`You've used today's ${limit} game builds. Come back tomorrow!`, 429);
   user.builds = [...(user.builds || []).filter((d) => d === today()), today()];
   persist();
 }
