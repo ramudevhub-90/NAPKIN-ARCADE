@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feedback inbox · Napkin Arcade</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .inbox { max-width: 900px; margin: 0 auto; padding: 16px 20px 40px; }
+    .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .filters button { font-weight: 700; border-radius: 99px; padding: 7px 14px; }
+    .filters button.on { background: var(--ink); color: var(--bg); }
+    .fb { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+    .fb .meta { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .fb .meta a { color: var(--accent); font-weight: 700; text-decoration: none; }
+    .fb .text { font-size: 15px; line-height: 1.45; white-space: pre-wrap; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    a.btn, button.btn { text-decoration: none; font-weight: 700; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+    .btn.primary { background: var(--accent); border: none; color: #fff; }
+    .status { font-weight: 700; text-transform: uppercase; font-size: 11px; }
+    .status.pending { color: var(--amber); } .status.applied { color: var(--green); } .status.rejected { color: var(--muted); } .status.working, .status.approved { color: var(--blue); }
+    .err { color: var(--red); font-size: 13px; }
+    .kind { font-size: 11px; } .kind.bug { color: var(--red); } .kind.idea { color: var(--blue); }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><a class="logo" href="/" style="text-decoration:none">✏️🎮</a><div><h1>Feedback inbox</h1><p>Bugs and enhancement ideas from players across all your games, waiting for your approval. Approve one and the studio builds it as a draft.</p></div></div>
+    <div class="userbar"><a href="/studio#mine" class="ub">← My games</a><a href="/studio" class="ub">New game</a></div>
+  </header>
+  <main class="inbox">
+    <div class="filters" id="filters"></div>
+    <p class="err" id="err"></p>
+    <div id="list"><p class="muted">Loading…</p></div>
+  </main>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const FILTERS = [["pending", "Awaiting approval"], ["bug", "🐞 Bugs"], ["idea", "✨ Enhancements"], ["applied", "Applied"], ["rejected", "Rejected"], ["all", "All"]];
+    const match = (f, k) => k === "all" || (k === "bug" || k === "idea" ? f.kind === k && f.status === "pending" : f.status === k);
+    let items = [], filter = "pending";
+
+    function render() {
+      const count = (k) => items.filter((f) => match(f, k)).length;
+      $("filters").innerHTML = FILTERS.map(([k, label]) => `<button class="${k === filter ? "on" : ""}" data-filter="${k}">${label} (${count(k)})</button>`).join("");
+      const shown = items.filter((f) => match(f, filter));
+      $("list").innerHTML = shown.length ? shown.map((f) => `<div class="fb">
+        <div class="meta"><span><b class="kind ${f.kind}">${f.kind === "bug" ? "🐞 Bug" : "✨ Enhancement"}</b> · <a href="/studio/game/${f.gameId}">${esc(f.title)}</a> · ${esc(f.name)} · ${new Date(f.at).toLocaleString()}${f.reports > 1 ? ` · seen ${f.reports}×` : ""}</span><span class="status ${f.status}">${f.status}</span></div>
+        <div class="text">${esc(f.text)}</div>
+        ${f.status === "pending" ? `<div class="row"><a class="btn primary" href="/studio/game/${f.gameId}?approve=${f.id}">✓ Approve & apply</a><button class="btn" data-reject="${f.id}" data-game="${f.gameId}">✕ Reject</button><a class="btn" href="/play/${f.gameId}" target="_blank" rel="noopener">▶ Play</a></div>` : ""}
+      </div>`).join("")
+        : `<p class="muted">${items.length ? "Nothing here." : "No feedback yet. Share your games — players can send feedback with the 💬 button on the play page."}</p>`;
+    }
+    async function load() {
+      const r = await fetch("/api/my/feedback");
+      if (r.status === 401) return location.replace("/login?next=/studio/feedback");
+      items = (await r.json()).feedback || [];
+      if (filter === "pending" && !items.some((f) => f.status === "pending") && items.length) filter = "all";
+      render();
+    }
+    document.addEventListener("click", async (e) => {
+      const f = e.target.closest("[data-filter]");
+      if (f) { filter = f.dataset.filter; return render(); }
+      const rj = e.target.closest("[data-reject]");
+      if (!rj) return;
+      $("err").textContent = "";
+      rj.disabled = true;
+      const r = await fetch(`/api/projects/${rj.dataset.game}/feedback/${rj.dataset.reject}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reject" }) });
+      if (!r.ok) $("err").textContent = (await r.json().catch(() => ({}))).error || "Something went wrong";
+      load();
+    });
+    load();
+  </script>
+</body>
+</html>

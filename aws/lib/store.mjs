@@ -3,7 +3,7 @@
 //   GAME#<id>       META                    owner, title, version, status, changelog… (GSI1: OWNER#<sub>, GSI2: GALLERY)
 //   GAME#<id>       VERSION#0001            summary, score, at (payload in S3: games/<id>/v1.json)
 //   GAME#<id>       CHAT#<ts>#<rand>        role, text, version…
-//   GAME#<id>       FEEDBACK#<id>           text, name, status
+//   GAME#<id>       FEEDBACK#<id>           text, name, kind (bug|idea), status, reports
 //   GAME#<id>       SCORE#<inverted>#<ts>   leaderboard entry
 //   GAME#<id>       TASK#<taskId>           browser task result (TTL)
 //   SPEND           TOTAL                   AI spend counter (hard cap)
@@ -129,11 +129,15 @@ export async function addChat(id, msg) {
   return item;
 }
 export const chat = (id) => queryPrefix(`GAME#${id}`, "CHAT#", { limit: 200, forward: false }).then((x) => x.reverse());
-export async function addFeedback(id, text, name) {
-  const item = { pk: `GAME#${id}`, sk: `FEEDBACK#${newId(4)}`, gameId: id, text, name, status: "pending", at: new Date().toISOString() };
+export async function addFeedback(id, text, name, kind = "idea", extra = {}) {
+  const item = { pk: `GAME#${id}`, sk: `FEEDBACK#${newId(4)}`, gameId: id, text, name, kind, status: "pending", reports: 1, at: new Date().toISOString(), ...extra };
   item.id = item.sk.slice(9);
   await putItem(item);
   return item;
+}
+// The same crash seen again: count it on the open report instead of filing a new one.
+export async function bumpFeedback(id, fid) {
+  await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `GAME#${id}`, sk: `FEEDBACK#${fid}` }, UpdateExpression: "ADD reports :one SET lastAt = :t", ExpressionAttributeValues: { ":one": 1, ":t": new Date().toISOString() } }));
 }
 export const feedback = (id) => queryPrefix(`GAME#${id}`, "FEEDBACK#");
 export async function setFeedback(id, fid, status) {

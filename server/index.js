@@ -96,6 +96,8 @@ async function startRevision(id, user, meta, game, request, source, feedbackId =
   });
 }
 const fbHits = new Map();
+// Behind Caddy every request comes from loopback; the real client is the last X-Forwarded-For hop.
+const clientIp = (req) => { const a = req.socket.remoteAddress || ""; return /^(::1|127\.|::ffff:127\.)/.test(a) ? String(req.headers["x-forwarded-for"] || a).split(",").pop().trim() : a; };
 
 async function createProject({ idea, image, user }) {
   if (!ready) throw Object.assign(new Error("The studio needs a Nebius API key on the server. Try a showcase game instead."), { status: 503 });
@@ -155,12 +157,20 @@ const server = http.createServer(async (req, res) => {
       if (!user) return json(res, 401, { error: "Please sign in." });
       return json(res, 200, { projects: (await store.myGames(user.sub)).map(gameCard) });
     }
+    // Every player comment across the signed-in creator's games, newest first.
+    if (url.pathname === "/api/my/feedback") {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in." });
+      const games = (await store.myGames(user.sub)).filter((m) => m.status === "ready");
+      const lists = await Promise.all(games.map(async (m) => (await store.feedback(m.id)).map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto, gameId: m.id, title: m.title || "Untitled game" }))));
+      return json(res, 200, { feedback: lists.flat().sort((a, b) => (a.at < b.at ? 1 : -1)) });
+    }
     if (url.pathname === "/api/gallery") return json(res, 200, { games: (await store.gallery(24)).map(gameCard) });
     if (url.pathname === "/api/scores") {
       const game = url.searchParams.get("game") || "";
       if (!(await knownGame(game))) return json(res, 404, { error: "Game not found" });
       if (req.method === "POST") {
-        const ip = req.socket.remoteAddress, now = Date.now(), hits = (scoreHits.get(ip) || []).filter((t) => now - t < 60e3);
+        const ip = clientIp(req), now = Date.now(), hits = (scoreHits.get(ip) || []).filter((t) => now - t < 60e3);
         if (hits.length >= 12) return json(res, 429, { error: "Too many scores — slow down." });
         scoreHits.set(ip, [...hits, now]);
         const b = await body(req, 1e4);
@@ -195,7 +205,7 @@ const server = http.createServer(async (req, res) => {
       if (what === "workshop") {
         const { meta, game } = await ownedGame(req, id);
         const [versions, chatLog, fb] = await Promise.all([store.versions(id), store.chat(id), store.feedback(id)]);
-        return json(res, 200, { id, title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at }) => ({ id, text, name, status, at })), busy: !!(p && !p.done) });
+        return json(res, 200, { id, title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto })), busy: !!(p && !p.done) });
       }
       if (what === "chat" && req.method === "POST") {
         const { user, meta, game } = await ownedGame(req, id);
@@ -223,13 +233,24 @@ const server = http.createServer(async (req, res) => {
       }
       if (what === "feedback" && req.method === "POST" && !parts[4]) {
         if ((await store.getGame(id))?.status !== "ready") return json(res, 404, { error: "Game not found." });
-        const ip = req.socket.remoteAddress, now = Date.now(), hits = (fbHits.get(ip) || []).filter((t) => now - t < 3600e3);
+        const ip = clientIp(req), now = Date.now(), hits = (fbHits.get(ip) || []).filter((t) => now - t < 3600e3);
         if (hits.length >= 8) return json(res, 429, { error: "Thanks! You've sent a lot of feedback this hour." });
         fbHits.set(ip, [...hits, now]);
-        const b = await body(req, 1e4), text = String(b.text || "").trim().slice(0, 600);
+        const b = await body(req, 1e4);
+        // Crashes in a player's browser are filed automatically as bugs (one open report per error).
+        if (b.auto) {
+          const msg = String(b.error?.message || "").slice(0, 300), stack = String(b.error?.stack || "").slice(0, 600);
+          if (!msg) return json(res, 400, { error: "No error." });
+          const open = (await store.feedback(id)).find((f) => f.auto && f.error === msg && (f.status === "pending" || f.status === "working"));
+          if (open) await store.bumpFeedback(id, open.id);
+          else await store.addFeedback(id, `The game crashed for a player: "${msg}"${stack ? `\nWhere: ${stack}` : ""}`, "Crash report", "bug", { auto: true, error: msg });
+          await syncPending(id);
+          return json(res, 200, { ok: true });
+        }
+        const text = String(b.text || "").trim().slice(0, 600);
         if (text.length < 3) return json(res, 400, { error: "Tell us a bit more." });
         const name = String((await currentUser(req))?.name || b.name || "Player").replace(/[<>]/g, "").slice(0, 30);
-        await store.addFeedback(id, text, name);
+        await store.addFeedback(id, text, name, b.kind === "bug" ? "bug" : "idea");
         await syncPending(id);
         return json(res, 200, { ok: true });
       }
@@ -240,9 +261,10 @@ const server = http.createServer(async (req, res) => {
         if (!f) return json(res, 404, { error: "Feedback not found." });
         if (action === "reject") { await store.setFeedback(id, f.id, "rejected"); await syncPending(id); return json(res, 200, { ok: true }); }
         if (action !== "approve" || f.status !== "pending") return json(res, 400, { error: "Nothing to do." });
-        await startRevision(id, user, meta, game, f.text, "feedback", f.id);
+        const request = f.kind === "bug" ? `Fix this bug reported by ${f.auto ? "the crash reporter" : "a player"}${f.reports > 1 ? ` (seen ${f.reports} times)` : ""}: ${f.text}` : f.text;
+        await startRevision(id, user, meta, game, request, "feedback", f.id);
         await store.setFeedback(id, f.id, "working"); await syncPending(id);
-        await store.addChat(id, { role: "feedback", text: `${f.name}: ${f.text}` });
+        await store.addChat(id, { role: "feedback", text: `${f.kind === "bug" ? "🐞 Bug" : "✨ Enhancement"} from ${f.name}: ${f.text}` });
         return json(res, 200, { ok: true });
       }
       if (what === "game3d") {
@@ -295,6 +317,10 @@ const server = http.createServer(async (req, res) => {
     if (parts[0] === "studio" && parts[1] === "game" && /^[a-z0-9]+$/.test(parts[2] || "")) {
       if (!(await currentUser(req))) { res.writeHead(302, { Location: `/login?next=${encodeURIComponent(url.pathname)}` }); return res.end(); }
       return page("workshop.html");
+    }
+    if (url.pathname === "/studio/feedback") {
+      if (!(await currentUser(req))) { res.writeHead(302, { Location: "/login?next=/studio/feedback" }); return res.end(); }
+      return page("inbox.html");
     }
     if (url.pathname === "/studio") {
       if (!(await currentUser(req))) { res.writeHead(302, { Location: "/login?next=/studio" }); return res.end(); }

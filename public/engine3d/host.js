@@ -74,6 +74,7 @@ const ui = {
     }
     if (mode === "view") { clearTimeout(viewRestart); viewRestart = setTimeout(() => mode === "view" && start("view"), 2200); return; }
     if (mode !== "play") return;
+    if (st.error) parent.postMessage({ type: "runtime-error", error: st.error }, "*");
     parent.postMessage({ type: "game-end", result: { won: won ? 1 : 0, progress: +st.progress.toFixed(3), score: st.score, time: +st.time.toFixed(1) } }, "*");
     setTimeout(() => {
       $("eTitle").textContent = won ? "YOU MADE IT!" : st.error ? "OOPS!" : "GAME OVER";

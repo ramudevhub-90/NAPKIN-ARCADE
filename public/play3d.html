@@ -56,7 +56,8 @@
   <button id="fs" class="btn ghost" title="Fullscreen">⤢</button>
   <button id="fbBtn" class="btn ghost hidden" title="Send feedback to the game's creator">💬 Feedback</button>
   <div id="fbBox" class="overlay hidden"><form class="glass panel" id="fbForm">
-    <h2>Send feedback</h2><p class="muted">What would make this game better? The creator reviews every note and can ask the AI studio to build it in.</p>
+    <h2>Send feedback</h2><p class="muted">Found a bug or have an idea? The creator reviews every note and can ask the AI studio to build it in.</p>
+    <div class="row" id="fbKind" style="margin-top:10px"><button type="button" class="btn" data-kind="bug">🐞 Report a bug</button><button type="button" class="btn ghost" data-kind="idea">✨ Suggest an enhancement</button></div>
     <textarea id="fbText" maxlength="600" rows="4" required placeholder="e.g. The second stage is too hard — add a shield power-up." style="width:100%;font:inherit;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0"></textarea>
     <input id="fbName" maxlength="30" placeholder="Your name (optional)">
     <div class="row"><button class="btn" id="fbSend">Send feedback</button><button type="button" class="btn ghost" id="fbCancel">Cancel</button></div>
@@ -151,9 +152,21 @@
     if (!id.startsWith("example-")) $("fbBtn").classList.remove("hidden");
     $("fbBtn").onclick = () => { $("fbBox").classList.remove("hidden"); $("fbMsg").textContent = ""; $("fbText").focus(); try { $("fbName").value = localStorage.getItem("na_name") || ""; } catch {} };
     $("fbCancel").onclick = () => $("fbBox").classList.add("hidden");
+    let fbKind = "bug";
+    const setKind = (k) => { fbKind = k; document.querySelectorAll("#fbKind button").forEach((b) => b.classList.toggle("ghost", b.dataset.kind !== k)); $("fbText").placeholder = k === "bug" ? "e.g. My car fell through the road at the start of stage 2." : "e.g. The second stage is too hard — add a shield power-up."; };
+    $("fbKind").onclick = (e) => { const b = e.target.closest("[data-kind]"); if (b) setKind(b.dataset.kind); };
+    setKind("bug");
+    // Crashes are reported to the creator automatically (once per error per visit).
+    const reported = new Set();
+    addEventListener("message", (e) => {
+      const d = e.data || {};
+      if (e.source !== g.contentWindow || d.type !== "runtime-error" || id.startsWith("example-") || reported.has(d.error?.message)) return;
+      reported.add(d.error?.message);
+      fetch(`/api/projects/${encodeURIComponent(id)}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ auto: true, error: d.error }) }).catch(() => {});
+    });
     $("fbForm").onsubmit = async (e) => {
       e.preventDefault();
-      const r = await fetch(`/api/projects/${encodeURIComponent(id)}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: $("fbText").value, name: $("fbName").value }) });
+      const r = await fetch(`/api/projects/${encodeURIComponent(id)}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: $("fbText").value, name: $("fbName").value, kind: fbKind }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { $("fbMsg").textContent = j.error || "Couldn't send that."; return; }
       $("fbText").value = ""; $("fbMsg").textContent = "Thanks! The creator will review it.";

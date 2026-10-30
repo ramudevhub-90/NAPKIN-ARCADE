@@ -40,6 +40,7 @@
     .vbtns { display: flex; gap: 4px; }
     .pill.live { background: var(--green); color: #fff; } .pill.draft { background: var(--amber); color: #fff; }
     .err { color: var(--red); font-size: 13px; }
+    .kind { font-size: 11px; } .kind.bug { color: var(--red); } .kind.idea { color: var(--blue); }
     @media (max-width: 960px) { .ws { grid-template-columns: 1fr; } .chat { height: 340px; } }
   </style>
 </head>
@@ -74,7 +75,7 @@
         <p class="err" id="err"></p>
       </div>
       <div id="paneFb" hidden>
-        <p class="muted" style="margin:0 0 10px;font-size:13px">Players send feedback from the game's play page. Approve an item and the studio applies it as a new version; reject to dismiss it.</p>
+        <p class="muted" style="margin:0 0 10px;font-size:13px">Bug reports and enhancement ideas from players (crashes are reported automatically) wait here for your approval. Approve one and the studio builds it as a new draft; reject to dismiss it. <a href="/studio/feedback">All games →</a></p>
         <div id="feedback"></div>
       </div>
     </section>

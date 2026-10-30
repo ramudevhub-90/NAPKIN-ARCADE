@@ -85,7 +85,7 @@ function renderFeedback() {
   const fb = [...state.feedback].reverse();
   const pendingN = fb.filter((f) => f.status === "pending").length;
   $("fbCount").textContent = pendingN ? `(${pendingN})` : "";
-  $("feedback").innerHTML = fb.length ? fb.map((f) => `<div class="fb"><div class="meta"><span>${esc(f.name)} · ${new Date(f.at).toLocaleString()}</span><span class="status ${f.status}">${f.status}</span></div>${esc(f.text)}
+  $("feedback").innerHTML = fb.length ? fb.map((f) => `<div class="fb"><div class="meta"><span><b class="kind ${f.kind}">${f.kind === "bug" ? "🐞 Bug" : "✨ Enhancement"}</b> · ${esc(f.name)} · ${new Date(f.at).toLocaleString()}${f.reports > 1 ? ` · seen ${f.reports}×` : ""}</span><span class="status ${f.status}">${f.status}</span></div>${esc(f.text)}
     ${f.status === "pending" ? `<div class="row" style="margin-top:8px"><button class="btn primary" data-approve="${f.id}">✓ Approve & apply</button><button class="btn" data-reject="${f.id}">✕ Reject</button></div>` : ""}</div>`).join("")
     : '<p class="muted">No feedback yet. Share your game — players can send feedback from the play page.</p>';
 }
@@ -164,6 +164,16 @@ document.addEventListener("click", async (e) => {
   } catch (err) { $("err").textContent = err.message; }
 });
 
+// Arrived from the feedback inbox with "Approve & apply": start it once the test lab is up.
+async function approveFromInbox() {
+  const fid = new URLSearchParams(location.search).get("approve");
+  if (!fid) return;
+  history.replaceState(null, "", location.pathname);
+  const f = state?.feedback.find((x) => x.id === fid);
+  if (!f || f.status !== "pending") return;
+  document.querySelector(`[data-approve="${fid}"]`)?.click();
+}
+
 resetLab();
 resetScreen();
-load();
+load().then(approveFromInbox);
