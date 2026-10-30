@@ -97,6 +97,31 @@ function renderVersions() {
     return `<div class="${v.v === previewing ? "on" : ""}"><b>v${v.v}</b><span>${esc(v.summary)}${v.score != null ? ` <span class="muted">· fun ${v.score}</span>` : ""}</span>${pill}<span class="vbtns"><button class="btn" data-preview="${v.v}">Preview</button>${act}</span></div>`;
   }).join("");
 }
+// ---------- who can play: everyone, or my circle ----------
+let members = null;
+function renderShare() {
+  document.querySelectorAll('input[name="vis"]').forEach((r) => (r.checked = r.value === state.visibility));
+  $("circleBox").hidden = state.visibility !== "circle";
+  if (state.visibility === "circle" && !members) loadCircle();
+}
+function renderMembers() {
+  $("members").innerHTML = members.length ? members.map((m) => `<span>${esc(m.email)}<button type="button" title="Remove" data-unshare="${esc(m.email)}">✕</button></span>`).join("") : '<span class="muted" style="background:none;padding:0">No one yet — add a friend\'s email.</span>';
+}
+async function loadCircle(change) {
+  const r = await fetch("/api/my/circle", change ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(change) } : {});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return ($("shareErr").textContent = j.error || "Something went wrong");
+  $("shareErr").textContent = "";
+  members = j.members; renderMembers();
+}
+document.querySelectorAll('input[name="vis"]').forEach((r) => (r.onchange = async () => {
+  $("shareErr").textContent = "";
+  try { await post(`/api/projects/${id}/visibility`, { visibility: r.value }); state.visibility = r.value; } catch (err) { $("shareErr").textContent = err.message; }
+  renderShare();
+}));
+$("circleAdd").onsubmit = async (e) => { e.preventDefault(); await loadCircle({ email: $("circleEmail").value }); if (!$("shareErr").textContent) $("circleEmail").value = ""; };
+$("members").onclick = (e) => { const b = e.target.closest("[data-unshare]"); if (b && confirm(`Remove ${b.dataset.unshare} from your circle? They'll lose access to all your circle-only games.`)) loadCircle({ email: b.dataset.unshare, remove: true }); };
+
 function setBusy(busy, text = "") {
   $("send").disabled = busy; $("text").disabled = busy;
   document.querySelectorAll("[data-approve]").forEach((b) => (b.disabled = busy));
@@ -113,7 +138,7 @@ async function load() {
   $("tagline").textContent = j.tagline || "";
   $("ver").textContent = j.version > j.liveVersion ? `live v${j.liveVersion} · draft v${j.version}` : `live v${j.liveVersion}`;
   $("playLink").href = `/play/${id}`; $("friendsLink").href = `/play/${id}?friends=1`;
-  renderChat(); renderFeedback(); renderVersions();
+  renderChat(); renderFeedback(); renderVersions(); renderShare();
   if (first) showPreview(j.liveVersion);
   setBusy(j.busy);
   if (j.busy) listen();

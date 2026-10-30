@@ -40,6 +40,14 @@
     .vbtns { display: flex; gap: 4px; }
     .pill.live { background: var(--green); color: #fff; } .pill.draft { background: var(--amber); color: #fff; }
     .err { color: var(--red); font-size: 13px; }
+    .share { display: grid; gap: 8px; }
+    #circleEmail { border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 10px; font: inherit; min-width: 0; }
+    .opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+    .opt:has(input:checked) { border-color: var(--accent); background: var(--panel2); }
+    .opt input { margin-top: 3px; } .opt small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+    .members { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .members span { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: var(--panel2); border-radius: 99px; padding: 4px 6px 4px 12px; }
+    .members button { border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 4px; }
     .kind { font-size: 11px; } .kind.bug { color: var(--red); } .kind.idea { color: var(--blue); }
     @media (max-width: 960px) { .ws { grid-template-columns: 1fr; } .chat { height: 340px; } }
   </style>
@@ -57,6 +65,19 @@
         <div class="frame"><iframe id="screen" sandbox="allow-scripts" title="Game preview"></iframe></div>
         <p class="muted" style="margin:8px 0 0;font-size:13px"><b id="previewLabel"></b></p>
         <p class="muted" id="tagline" style="margin:4px 0 0;font-size:14px"></p>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2 style="margin-top:0">Who can play</h2>
+        <div class="share">
+          <label class="opt"><input type="radio" name="vis" value="public"><span><b>🌍 Everyone</b><small>Open to the whole Napkin Arcade community and listed in the public arcade.</small></span></label>
+          <label class="opt"><input type="radio" name="vis" value="circle"><span><b>🔒 My circle</b><small>Only you and the people in your circle, signed in with their email. Hidden from the arcade.</small></span></label>
+        </div>
+        <div id="circleBox" class="circlebox">
+          <p class="muted" style="margin:10px 0 6px;font-size:13px"><b>My circle</b> · shared by all your circle-only games. People join by signing in with the email you add; send them the ▶ Play link.</p>
+          <form class="compose" id="circleAdd" style="margin-top:0"><input id="circleEmail" type="email" placeholder="friend@example.com" required><button class="btn primary">Add</button></form>
+          <div id="members" class="members"></div>
+        </div>
+        <p class="err" id="shareErr"></p>
       </div>
       <div class="card" style="margin-top:16px">
         <h2 style="margin-top:0">Versions</h2>

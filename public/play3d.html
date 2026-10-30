@@ -55,6 +55,10 @@
   <button id="friends" class="btn">👥 Play with friends</button>
   <button id="fs" class="btn ghost" title="Fullscreen">⤢</button>
   <button id="fbBtn" class="btn ghost hidden" title="Send feedback to the game's creator">💬 Feedback</button>
+  <div id="lock" class="overlay hidden" style="z-index:30"><div class="glass panel" style="text-align:center">
+    <h2 id="lockTitle">🔒 Private game</h2><p class="muted" id="lockText"></p>
+    <div class="row" style="justify-content:center;margin-top:14px"><a class="btn" id="lockSignIn" style="text-decoration:none">Sign in to play</a><a class="btn ghost" href="/arcade" style="text-decoration:none">Browse public games</a></div>
+  </div></div>
   <div id="fbBox" class="overlay hidden"><form class="glass panel" id="fbForm">
     <h2>Send feedback</h2><p class="muted">Found a bug or have an idea? The creator reviews every note and can ask the AI studio to build it in.</p>
     <div class="row" id="fbKind" style="margin-top:10px"><button type="button" class="btn" data-kind="bug">🐞 Report a bug</button><button type="button" class="btn ghost" data-kind="idea">✨ Suggest an enhancement</button></div>
@@ -101,7 +105,19 @@
     const params = new URLSearchParams(location.search);
     let room = (params.get("room") || "").toUpperCase(), ws = null, me = null, roster = null, title = "", lastStates = [];
     const g = $("g");
-    g.src = `/engine3d/runtime.html?id=${encodeURIComponent(id)}${room ? "&mp=1" : ""}${params.get("autoplay") === "1" ? "&autoplay=1" : ""}`;
+    const frameSrc = (t) => `/engine3d/runtime.html?id=${encodeURIComponent(id)}${room ? "&mp=1" : ""}${params.get("autoplay") === "1" ? "&autoplay=1" : ""}${t ? `&t=${encodeURIComponent(t)}` : ""}`;
+    // Circle-only games: check access first (the game frame then gets a ticket to load it).
+    if (id.startsWith("example-")) g.src = frameSrc();
+    else fetch(`/api/projects/${encodeURIComponent(id)}/access`).then(async (r) => {
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) return (g.src = frameSrc(j.ticket));
+      $("lockTitle").textContent = j.private ? "🔒 Private game" : "Game not found";
+      $("lockText").textContent = !j.private ? "This game doesn't exist or isn't ready yet." : j.signedIn ? `${j.by} shared this game with their circle only, and ${j.email} isn't in it yet. Ask them to add you, or sign in with the email they invited.` : `${j.by} shared this game with their circle only. Sign in with the email they invited to play.`;
+      $("lockSignIn").href = `/login?next=${encodeURIComponent(location.pathname + location.search)}${j.signedIn ? "&switch=1" : ""}`;
+      $("lockSignIn").textContent = j.signedIn ? "Use a different email" : "Sign in to play";
+      $("lockSignIn").classList.toggle("hidden", !j.private);
+      $("lock").classList.remove("hidden");
+    });
     g.addEventListener("load", () => g.focus());
     const toGame = (msg) => g.contentWindow?.postMessage(msg, "*");
     const toast = (t) => { $("toast").textContent = t; $("toast").classList.remove("hidden"); clearTimeout(toast.t); toast.t = setTimeout(() => $("toast").classList.add("hidden"), 2200); };

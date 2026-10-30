@@ -289,7 +289,7 @@ addEventListener("message", async (ev) => {
   if (!id && !example) return parent.postMessage({ type: "ready" }, "*");
   try {
     const ex = example || (id?.startsWith("example-") ? id.slice(8) : null);
-    payload = ex ? { example: ex } : await (await fetch(`../api/projects/${id}/game3d`)).json();
+    payload = ex ? { example: ex } : await (await fetch(`../api/projects/${id}/game3d${params.get("t") ? `?t=${encodeURIComponent(params.get("t"))}` : ""}`)).json();
     if (payload.error) throw new Error(payload.error);
     mod = await compile(payload);
     if (params.get("mode") === "view" || params.get("mp") === "1") start("view");

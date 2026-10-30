@@ -229,7 +229,10 @@ async function loadMe() {
   const { projects = [] } = await (await fetch("/api/my/projects")).json();
   const newFb = projects.reduce((n, p) => n + (p.pendingFeedback || 0), 0);
   if ($("inboxLink")) $("inboxLink").textContent = newFb ? `📬 Feedback (${newFb})` : "📬 Feedback";
-  if (projects.length) $("myGames").innerHTML = projects.map((p) => `<a href="${p.ready ? `/studio/game/${p.id}` : "#"}"><b>${esc(p.title || (p.status === "failed" ? "Build failed" : "Building…"))}</b><span>${esc(p.tagline || p.idea)}</span><span>${new Date(p.created).toLocaleString()}${p.ready ? ` · v${p.version}` : ""}${p.score != null ? ` · fun ${p.score}` : ""}${p.pendingFeedback ? ` · <b style="color:var(--accent)">📬 ${p.pendingFeedback} new feedback</b>` : ""}</span></a>`).join("");
+  if (projects.length) $("myGames").innerHTML = projects.map((p) => `<a href="${p.ready ? `/studio/game/${p.id}` : "#"}"><b>${esc(p.title || (p.status === "failed" ? "Build failed" : "Building…"))}</b><span>${esc(p.tagline || p.idea)}</span><span>${new Date(p.created).toLocaleString()}${p.ready ? ` · v${p.version}` : ""}${p.score != null ? ` · fun ${p.score}` : ""}${p.visibility === "circle" ? " · 🔒 circle only" : ""}${p.pendingFeedback ? ` · <b style="color:var(--accent)">📬 ${p.pendingFeedback} new feedback</b>` : ""}</span></a>`).join("");
+  const { games: shared = [] } = await (await fetch("/api/shared")).json();
+  $("shared").hidden = !shared.length;
+  $("sharedGames").innerHTML = shared.map((p) => `<a href="/play/${p.id}"><b>${esc(p.title || "Untitled game")}</b><span>${esc(p.tagline || p.idea)}</span><span>🔒 by ${esc(p.by)}${p.score != null ? ` · fun ${p.score}` : ""}</span></a>`).join("");
 }
 $("logout").onclick = async () => { await fetch("/api/auth/logout", { method: "POST" }); try { localStorage.removeItem("na_tokens"); } catch {} location.href = "/"; };
 loadMe();

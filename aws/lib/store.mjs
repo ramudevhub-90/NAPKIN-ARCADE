@@ -1,6 +1,8 @@
 // Data layer: one DynamoDB table (single-table design) + S3 for game payloads.
 //   USER#<sub>      PROFILE                 email, name, build/revision counters
-//   GAME#<id>       META                    owner, title, version, status, changelog… (GSI1: OWNER#<sub>, GSI2: GALLERY)
+//   USER#<sub>      CIRCLE#<email>          someone the creator shares circle-only games with
+//   MEMBER#<email>  OWNER#<sub>             reverse link: whose circles this email is in
+//   GAME#<id>       META                    owner, title, version, status, visibility, changelog… (GSI1: OWNER#<sub>, GSI2: GALLERY when public)
 //   GAME#<id>       VERSION#0001            summary, score, at (payload in S3: games/<id>/v1.json)
 //   GAME#<id>       CHAT#<ts>#<rand>        role, text, version…
 //   GAME#<id>       FEEDBACK#<id>           text, name, kind (bug|idea), status, reports
@@ -63,7 +65,7 @@ export const countToday = (u, kind) => (u?.[`${kind}Day`] === today() ? u[`${kin
 export const getGame = (id) => getItem(`GAME#${id}`, "META");
 export async function putGameMeta(meta) {
   const item = { ...meta, pk: `GAME#${meta.id}`, sk: "META", GSI1PK: `OWNER#${meta.owner}`, GSI1SK: meta.createdAt };
-  if (meta.status === "ready" && !meta.hidden) { item.GSI2PK = "GALLERY"; item.GSI2SK = meta.createdAt; }
+  if (meta.status === "ready" && !meta.hidden && meta.visibility !== "circle") { item.GSI2PK = "GALLERY"; item.GSI2SK = meta.createdAt; }
   await putItem(item);
   return item;
 }
@@ -71,6 +73,11 @@ export async function updateGame(id, fields) {
   const names = {}, values = {}, sets = [];
   for (const [k, v] of Object.entries(fields)) { names[`#${k}`] = k; values[`:${k}`] = v; sets.push(`#${k} = :${k}`); }
   await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `GAME#${id}`, sk: "META" }, UpdateExpression: `SET ${sets.join(", ")}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
+}
+// Who can play: "public" (everyone, listed in the gallery) or "circle" (the creator's circle only).
+export async function setVisibility(id, visibility) {
+  const { pk, sk, GSI1PK, GSI1SK, GSI2PK, GSI2SK, ...meta } = await getGame(id);
+  await putGameMeta({ ...meta, visibility });
 }
 export async function myGames(sub) {
   const out = await db.send(new QueryCommand({ TableName: TABLE, IndexName: "GSI1", KeyConditionExpression: "GSI1PK = :p", ExpressionAttributeValues: { ":p": `OWNER#${sub}` }, ScanIndexForward: false, Limit: 50 }));
@@ -99,6 +106,25 @@ export async function putDrawing(id, dataUrl) {
 export async function getDrawing(id) {
   const r = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: `drawings/${id}` }));
   return `data:${r.ContentType};base64,${Buffer.from(await r.Body.transformToByteArray()).toString("base64")}`;
+}
+
+// ---- circles: the people a creator shares circle-only games with ----
+export const circle = (sub) => queryPrefix(`USER#${sub}`, "CIRCLE#");
+export const inCircle = async (ownerSub, email) => !!email && !!(await getItem(`USER#${ownerSub}`, `CIRCLE#${email.toLowerCase()}`));
+export async function addToCircle(owner, email) {
+  const at = new Date().toISOString();
+  await putItem({ pk: `USER#${owner.sub}`, sk: `CIRCLE#${email}`, email, at });
+  await putItem({ pk: `MEMBER#${email}`, sk: `OWNER#${owner.sub}`, ownerSub: owner.sub, ownerName: owner.name, at });
+}
+export async function removeFromCircle(ownerSub, email) {
+  await deleteItem(`USER#${ownerSub}`, `CIRCLE#${email}`);
+  await deleteItem(`MEMBER#${email}`, `OWNER#${ownerSub}`);
+}
+// Circle-only games from every creator who added this email to their circle.
+export async function sharedWithMe(email) {
+  const links = await queryPrefix(`MEMBER#${email.toLowerCase()}`, "OWNER#");
+  const lists = await Promise.all(links.map(async (l) => (await myGames(l.ownerSub)).filter((m) => m.status === "ready" && m.visibility === "circle").map((m) => ({ ...m, ownerName: m.ownerName || l.ownerName }))));
+  return lists.flat();
 }
 
 // ---- versions / chat / feedback ----

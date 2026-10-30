@@ -59,7 +59,9 @@
     const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/studio";
     const say = (t, err) => { $("msg").textContent = t; $("msg").className = "msg" + (err ? " err" : ""); };
     let state = null;
-    fetch("/api/auth/me").then((r) => r.json()).then((j) => { if (j.user) location.replace(safeNext); });
+    // ?switch=1 signs out first so someone can sign in with a different email.
+    if (new URLSearchParams(location.search).get("switch") === "1") { fetch("/api/auth/logout", { method: "POST" }); try { localStorage.removeItem("na_tokens"); } catch {} }
+    else fetch("/api/auth/me").then((r) => r.json()).then((j) => { if (j.user) location.replace(safeNext); });
     $("step1").onsubmit = async (e) => {
       e.preventDefault(); $("send").disabled = true; say("Sending…");
       try {

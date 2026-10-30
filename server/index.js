@@ -129,8 +129,25 @@ async function body(req, limit = 4e6) {
   return JSON.parse(b || "{}");
 }
 
-const gameCard = (m) => ({ id: m.id, idea: m.idea, created: m.createdAt, by: m.ownerName || "Napkin Arcade", ready: m.status === "ready", status: m.status, version: m.version || 0, pendingFeedback: m.pendingFeedback || 0, title: m.title || null, tagline: m.tagline || "", preset: m.preset || null, score: m.score ?? null });
-const knownGame = async (g) => /^example-[a-z]+$/.test(g || "") || (/^[a-z0-9]+$/.test(g || "") && (await store.getGame(g))?.status === "ready");
+const gameCard = (m) => ({ id: m.id, idea: m.idea, created: m.createdAt, by: m.ownerName || "Napkin Arcade", ready: m.status === "ready", status: m.status, version: m.version || 0, pendingFeedback: m.pendingFeedback || 0, title: m.title || null, tagline: m.tagline || "", preset: m.preset || null, score: m.score ?? null, visibility: m.visibility || "public" });
+// Circle-only games can be played by their creator and the people in the creator's circle.
+async function canPlay(req, meta) {
+  if (meta.visibility !== "circle") return { ok: true };
+  const user = await currentUser(req);
+  return { ok: !!user && (user.sub === meta.owner || (await store.inCircle(meta.owner, user.email))), user };
+}
+const knownGame = async (req, g) => {
+  if (/^example-[a-z]+$/.test(g || "")) return true;
+  const meta = /^[a-z0-9]+$/.test(g || "") && (await store.getGame(g));
+  return meta?.status === "ready" && (await canPlay(req, meta)).ok;
+};
+// The game runs in a sandboxed (opaque-origin) frame that can't send the session cookie, so the
+// play page hands it a short-lived signed ticket for a circle-only game's payload.
+const TICKET_KEY = crypto.randomBytes(32);
+const sign = (s) => crypto.createHmac("sha256", TICKET_KEY).update(s).digest("hex");
+const playTicket = (id) => { const exp = Date.now() + 6 * 3600e3; return `${exp}.${sign(`${id}.${exp}`)}`; };
+const validTicket = (id, t) => { const [exp, sig] = String(t || "").split("."); return +exp > Date.now() && /^[a-f0-9]{64}$/.test(sig || "") && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(sign(`${id}.${exp}`))); };
+const EMAIL = /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,24}$/i;
 const scoreHits = new Map();
 
 const server = http.createServer(async (req, res) => {
@@ -165,10 +182,31 @@ const server = http.createServer(async (req, res) => {
       const lists = await Promise.all(games.map(async (m) => (await store.feedback(m.id)).map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto, gameId: m.id, title: m.title || "Untitled game" }))));
       return json(res, 200, { feedback: lists.flat().sort((a, b) => (a.at < b.at ? 1 : -1)) });
     }
+    // My circle: people who can play my circle-only games.
+    if (url.pathname === "/api/my/circle") {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in." });
+      if (req.method === "POST") {
+        const b = await body(req, 2e3), email = String(b.email || "").trim().toLowerCase();
+        if (!EMAIL.test(email)) return json(res, 400, { error: "That doesn't look like an email address." });
+        if (b.remove) await store.removeFromCircle(user.sub, email);
+        else {
+          if (email === user.email) return json(res, 400, { error: "You can always play your own games." });
+          if ((await store.circle(user.sub)).length >= 200) return json(res, 400, { error: "Your circle is full (200 people)." });
+          await store.addToCircle(user, email);
+        }
+      }
+      return json(res, 200, { members: (await store.circle(user.sub)).map(({ email, at }) => ({ email, at })) });
+    }
+    if (url.pathname === "/api/shared") {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in." });
+      return json(res, 200, { games: (await store.sharedWithMe(user.email)).map(gameCard) });
+    }
     if (url.pathname === "/api/gallery") return json(res, 200, { games: (await store.gallery(24)).map(gameCard) });
     if (url.pathname === "/api/scores") {
       const game = url.searchParams.get("game") || "";
-      if (!(await knownGame(game))) return json(res, 404, { error: "Game not found" });
+      if (!(await knownGame(req, game))) return json(res, 404, { error: "Game not found" });
       if (req.method === "POST") {
         const ip = clientIp(req), now = Date.now(), hits = (scoreHits.get(ip) || []).filter((t) => now - t < 60e3);
         if (hits.length >= 12) return json(res, 429, { error: "Too many scores — slow down." });
@@ -184,7 +222,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/api/rooms" && req.method === "POST") {
       const b = await body(req, 1e4);
-      if (!(await knownGame(b.game))) return json(res, 404, { error: "Game not found" });
+      if (!(await knownGame(req, b.game))) return json(res, 404, { error: "Game not found" });
       return json(res, 200, { room: createRoom(b.game) });
     }
 
@@ -202,10 +240,25 @@ const server = http.createServer(async (req, res) => {
         req.on("close", () => p.clients.delete(res));
         return;
       }
+      // Can this visitor play the game? Circle-only games also get a ticket for the game frame.
+      if (what === "access") {
+        const meta = await store.getGame(id);
+        if (meta?.status !== "ready") return json(res, 404, { error: "Game not found." });
+        const { ok, user } = await canPlay(req, meta);
+        if (!ok) return json(res, 403, { error: "This game is private.", private: true, by: meta.ownerName || "its creator", signedIn: !!user, email: user?.email || null });
+        return json(res, 200, { ok: true, visibility: meta.visibility || "public", ticket: meta.visibility === "circle" ? playTicket(id) : null });
+      }
+      if (what === "visibility" && req.method === "POST") {
+        await ownedGame(req, id);
+        const v = (await body(req, 1e3)).visibility;
+        if (v !== "public" && v !== "circle") return json(res, 400, { error: "Choose public or circle." });
+        await store.setVisibility(id, v);
+        return json(res, 200, { ok: true, visibility: v });
+      }
       if (what === "workshop") {
         const { meta, game } = await ownedGame(req, id);
         const [versions, chatLog, fb] = await Promise.all([store.versions(id), store.chat(id), store.feedback(id)]);
-        return json(res, 200, { id, title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto })), busy: !!(p && !p.done) });
+        return json(res, 200, { id, visibility: meta.visibility || "public", title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto })), busy: !!(p && !p.done) });
       }
       if (what === "chat" && req.method === "POST") {
         const { user, meta, game } = await ownedGame(req, id);
@@ -232,7 +285,9 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, await store.getPayload(id, v));
       }
       if (what === "feedback" && req.method === "POST" && !parts[4]) {
-        if ((await store.getGame(id))?.status !== "ready") return json(res, 404, { error: "Game not found." });
+        const fmeta = await store.getGame(id);
+        if (fmeta?.status !== "ready") return json(res, 404, { error: "Game not found." });
+        if (!(await canPlay(req, fmeta)).ok) return json(res, 403, { error: "This game is private." });
         const ip = clientIp(req), now = Date.now(), hits = (fbHits.get(ip) || []).filter((t) => now - t < 3600e3);
         if (hits.length >= 8) return json(res, 429, { error: "Thanks! You've sent a lot of feedback this hour." });
         fbHits.set(ip, [...hits, now]);
@@ -268,6 +323,8 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true });
       }
       if (what === "game3d") {
+        const gmeta = await store.getGame(id);
+        if (gmeta?.visibility === "circle" && !validTicket(id, url.searchParams.get("t")) && !(await canPlay(req, gmeta)).ok) return json(res, 403, { error: "This game is private." });
         try { return json(res, 200, await store.getPayload(id)); } catch { return json(res, 404, { error: "This game is not ready yet." }); }
       }
       if (what === "task" && req.method === "POST" && p) {
