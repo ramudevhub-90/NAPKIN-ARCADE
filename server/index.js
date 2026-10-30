@@ -202,7 +202,19 @@ const server = http.createServer(async (req, res) => {
     }
     const file = path.normalize(path.join(PUBLIC, url.pathname === "/" ? "index.html" : url.pathname));
     if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return json(res, 404, { error: "not found" });
-    res.writeHead(200, { "Content-Type": MIME[path.extname(file)] || "application/octet-stream", "Cache-Control": "no-cache", ...CORS });
+    const type = MIME[path.extname(file)] || "application/octet-stream", size = fs.statSync(file).size;
+    const media = /^(video|image)\//.test(type) && file.includes(`${path.sep}media${path.sep}`);
+    const headers = { "Content-Type": type, "Cache-Control": media ? "public, max-age=86400" : "no-cache", "Accept-Ranges": "bytes", ...CORS };
+    // Range requests let browsers stream and seek video (Safari requires them).
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
+    if (range) {
+      let start = range[1] === "" ? size - +range[2] : +range[1], end = range[1] === "" || range[2] === "" ? size - 1 : +range[2];
+      start = Math.max(0, start); end = Math.min(end, size - 1);
+      if (start > end) { res.writeHead(416, { "Content-Range": `bytes */${size}` }); return res.end(); }
+      res.writeHead(206, { ...headers, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": end - start + 1 });
+      return fs.createReadStream(file, { start, end }).pipe(res);
+    }
+    res.writeHead(200, { ...headers, "Content-Length": size });
     fs.createReadStream(file).pipe(res);
   } catch (e) {
     json(res, e.status || 500, { error: e instanceof BudgetError ? `Spending guardrail: ${e.message}` : e.message });

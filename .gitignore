@@ -5,3 +5,4 @@ data/
 video/out/
 video/node_modules/
 *.log
+public/media/
