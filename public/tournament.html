@@ -51,6 +51,7 @@
     .link { font: 600 13px ui-monospace, Menlo, monospace; color: var(--blue); background: rgba(62,240,255,.06); border: 1px solid rgba(62,240,255,.25); border-radius: 12px; padding: 10px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font: 700 14px Inter, sans-serif; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); cursor: pointer; }
     .btn.primary { background: var(--grad); border: 0; color: #fff; box-shadow: var(--glow); }
+    .invite { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 12px; } .note.ok { color: var(--green); }
     .side { display: grid; gap: 18px; align-content: start; }
     .note { font-size: 13px; color: var(--muted); margin: 10px 0 0; } .err { color: var(--red); }
     @media (max-width: 900px) { .twrap { grid-template-columns: 1fr; } .hero { grid-template-columns: 1fr; } .clock { text-align: left; } }
@@ -112,10 +113,16 @@
           </section>
           <section class="card"><h2>Rules</h2><p class="note" style="margin:0">Play <b>${esc(t.game.title)}</b> as many times as you like while the tournament is live. Your best score counts (ties go to the faster run). You need to be signed in, one entry per account.</p></section>
           <section class="card"><h2>Invite players</h2><div class="linkrow"><span class="link">${esc(t.url)}</span><button class="btn primary" id="copy">Copy</button><button class="btn" id="share">Share</button></div>
+            ${you.signedIn && you.canEnter && t.status !== "ended" ? `<form class="invite" id="inviteForm"><input type="email" id="inviteEmail" placeholder="friend@example.com" required><button class="btn">✉️ Email invite</button></form><p class="note" id="inviteNote"></p>` : ""}
             ${t.host && t.status !== "ended" ? `<button class="btn" id="end" style="margin-top:12px;font-size:12.5px">⏹ End the tournament now</button>` : ""}</section>
         </div>`;
       clock();
       $("enter")?.addEventListener("click", async (e) => { e.target.disabled = true; try { t = await post(`/api/t/${code}`, { action: "enter" }); render(); } catch (err) { $("actErr").textContent = err.message; e.target.disabled = false; } });
+      $("inviteForm")?.addEventListener("submit", async (e) => {
+        e.preventDefault(); const n = $("inviteNote"); n.className = "note"; n.textContent = "Sending…";
+        try { const j = await post(`/api/t/${code}`, { action: "invite", email: $("inviteEmail").value }); n.className = "note ok"; n.textContent = `✉️ Invite sent to ${j.invited}.`; $("inviteEmail").value = ""; }
+        catch (err) { n.className = "note err"; n.textContent = err.message; }
+      });
       $("end")?.addEventListener("click", async () => { if (!confirm("End the tournament now? Scores are final from this moment.")) return; try { t = await post(`/api/t/${code}`, { action: "end" }); render(); } catch (err) { $("actErr").textContent = err.message; } });
       $("copy").onclick = async () => { try { await navigator.clipboard.writeText(t.url); $("copy").textContent = "Copied ✓"; setTimeout(() => ($("copy").textContent = "Copy"), 1600); } catch {} };
       $("share").onclick = async () => { if (navigator.share) { try { await navigator.share({ title: t.name, text: `Join my ${t.game.title} tournament on Napkin Arcade`, url: t.url }); } catch {} } else $("copy").click(); };
@@ -127,7 +134,8 @@
     }
     await load();
     setInterval(clock, 1000);
-    setInterval(() => { if (t?.status === "live" && !document.hidden) load(); }, 15000); // live standings
+    // Live standings; never while someone is typing an invite.
+    setInterval(() => { if (t?.status === "live" && !document.hidden && !$("inviteEmail")?.value && document.activeElement?.id !== "inviteEmail") load(); }, 15000);
   </script>
 </body>
 </html>

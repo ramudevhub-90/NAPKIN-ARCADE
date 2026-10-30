@@ -11,7 +11,7 @@ import { startSession, logout, me, currentUser, chargeBuild, chargeRevision, cog
 import { createRoom, handleUpgrade } from "./rooms.js";
 import * as store from "../aws/lib/store.mjs";
 import { publishStudioEvent } from "../aws/lib/appsync.mjs";
-import { sendMail, circleInviteEmail, gameSharedEmail, groupInviteEmail } from "../aws/lib/mail.mjs";
+import { sendMail, circleInviteEmail, gameSharedEmail, groupInviteEmail, tournamentInviteEmail } from "../aws/lib/mail.mjs";
 
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), "..");
 const PUBLIC = path.join(ROOT, "public");
@@ -358,12 +358,25 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { improved, ...(await tourView(t, user)) });
       }
       if (req.method === "POST") {
-        const action = (await body(req, 1e3)).action;
+        const b = await body(req, 2e3), action = b.action;
         if (action === "enter") {
           const a = await tourAccess(t, user);
           if (!a.ok) return json(res, a.reason === "signin" ? 401 : 403, { error: a.reason === "signin" ? "Sign in to enter." : "This tournament is for members of its group." });
           if (tourStatus(t) === "ended") return json(res, 400, { error: "The tournament has ended." });
           await store.enterTournament(t, user);
+        } else if (action === "invite") {
+          // Anyone who can enter may invite others by email (same hourly limit as group invites).
+          if (!user) return json(res, 401, { error: "Sign in to invite people." });
+          if (!(await tourAccess(t, user)).ok) return json(res, 403, { error: "Only people who can enter can invite others." });
+          if (tourStatus(t) === "ended") return json(res, 400, { error: "The tournament has ended." });
+          const email = String(b.email || "").trim().toLowerCase();
+          if (!EMAIL.test(email)) return json(res, 400, { error: "That doesn't look like an email address." });
+          const now = Date.now(), hits = (inviteHits.get(user.sub) || []).filter((x) => now - x < 3600e3);
+          if (hits.length >= 30) return json(res, 429, { error: "That's a lot of invites this hour. Try again later." });
+          inviteHits.set(user.sub, [...hits, now]);
+          const sent = await sendMail({ to: email, replyTo: user.email, ...tournamentInviteEmail({ from: user.name, to: email, t, url: `${PUBLIC_URL()}/t/${t.code}` }) }).then(() => true, (e) => (console.error("tournament invite:", e.message), false));
+          if (!sent) return json(res, 502, { error: "The invite email didn't go out. Share the link instead." });
+          return json(res, 200, { invited: email });
         } else if (action === "end") {
           if (!user || user.sub !== t.host) return json(res, 403, { error: "Only the host can end the tournament." });
           if (tourStatus(t) !== "ended") { await store.endTournamentNow(t.tid); t.endsAt = new Date().toISOString(); }

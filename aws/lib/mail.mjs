@@ -131,3 +131,26 @@ export function groupInviteEmail({ from, to, group, joinUrl }) {
     text: `${from} invited you to join "${group.name}" on Napkin Arcade.\n${group.about ? group.about + "\n" : ""}\nJoin: ${joinUrl}\n`,
   };
 }
+// "Join my tournament": the game, the window, the prize, and a button to enter.
+export function tournamentInviteEmail({ from, to, t, url }) {
+  const money = (n) => { try { return new Intl.NumberFormat("en", { style: "currency", currency: t.prize?.currency || "USD", maximumFractionDigits: 0 }).format(n); } catch { return `${t.prize?.currency} ${n}`; } };
+  const amount = t.prize?.amount || 0, prize = amount ? money(amount) : "Bragging rights 🏆";
+  const when = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" });
+  const row = (k, v) => `<tr><td style="padding:6px 0;font:14px ${FONT};color:${BRAND.muted};width:90px">${k}</td><td style="padding:6px 0;font:600 14px ${FONT};color:${BRAND.ink}">${v}</td></tr>`;
+  return {
+    subject: `${from} invited you to “${t.name}” — ${amount ? prize + " prize" : "a Napkin Arcade tournament"}`,
+    html: layout({
+      preheader: `Play ${t.game.title}, post your best score, climb the leaderboard. Prize: ${prize}.`,
+      body: h1(`You're invited to ${esc(t.name)} 🏆`) +
+        p(`${esc(from)} is hosting a tournament on Napkin Arcade. Play <b>${esc(t.game.title)}</b> as often as you like while it's live — your best score counts.`) +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;border:1px solid ${BRAND.line};border-radius:14px"><tr><td style="padding:14px 16px">
+          <div style="font:800 26px ${FONT};color:${BRAND.accent};margin-bottom:6px">${esc(prize)}</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">${row("Game", `🎮 ${esc(t.game.title)}`)}${row("Starts", esc(when(t.startsAt)))}${row("Ends", esc(when(t.endsAt)))}${t.about ? row("About", esc(t.about)) : ""}</table>
+        </td></tr></table>` +
+        `<div style="margin:22px 0 18px">${button(url, "Enter the tournament")}</div>` +
+        p(`Sign in with <b>${esc(to)}</b> or any email — we'll send you a 6-digit code, no password needed.${amount ? " Prizes are paid by the host directly." : ""}`, `font-size:14px;color:${BRAND.muted}`),
+      footer: `${esc(from)} invited ${esc(to)} to a Napkin Arcade tournament. Reply to this email to reach them.`,
+    }),
+    text: `${from} invited you to "${t.name}" on Napkin Arcade.\nGame: ${t.game.title}\nPrize: ${prize}\nStarts: ${when(t.startsAt)}\nEnds: ${when(t.endsAt)}\n\nEnter: ${url}\n`,
+  };
+}
