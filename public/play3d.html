@@ -17,6 +17,7 @@
     .btn.ghost { background: rgba(255,255,255,.08); box-shadow: none; border: 1px solid var(--line); font: 600 14px Inter, sans-serif; }
     #friends { position: fixed; left: 16px; bottom: 16px; z-index: 5; }
     #fs { position: fixed; left: 16px; bottom: 68px; z-index: 5; padding: 9px 13px; }
+    #fbBtn { position: fixed; left: 64px; bottom: 68px; z-index: 5; padding: 9px 13px; }
     #lb { position: fixed; right: 16px; top: 70px; z-index: 6; width: 260px; padding: 12px 14px; max-height: calc(100vh - 120px); overflow: auto; }
     #lb h3 { margin: 0 0 8px; font: 13px "Russo One", sans-serif; letter-spacing: .08em; color: var(--muted); }
     #lb .r { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; font-weight: 600; font-size: 13.5px; padding: 4px 0; }
@@ -53,6 +54,14 @@
   <iframe id="g" sandbox="allow-scripts" allow="autoplay; fullscreen" title="Game"></iframe>
   <button id="friends" class="btn">👥 Play with friends</button>
   <button id="fs" class="btn ghost" title="Fullscreen">⤢</button>
+  <button id="fbBtn" class="btn ghost hidden" title="Send feedback to the game's creator">💬 Feedback</button>
+  <div id="fbBox" class="overlay hidden"><form class="glass panel" id="fbForm">
+    <h2>Send feedback</h2><p class="muted">What would make this game better? The creator reviews every note and can ask the AI studio to build it in.</p>
+    <textarea id="fbText" maxlength="600" rows="4" required placeholder="e.g. The second stage is too hard — add a shield power-up." style="width:100%;font:inherit;color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0"></textarea>
+    <input id="fbName" maxlength="30" placeholder="Your name (optional)">
+    <div class="row"><button class="btn" id="fbSend">Send feedback</button><button type="button" class="btn ghost" id="fbCancel">Cancel</button></div>
+    <p class="muted" id="fbMsg" style="margin:8px 0 0"></p>
+  </form></div>
   <div id="lb" class="glass hidden"><h3>🏆 LEADERBOARD</h3><div id="lbRows"></div><form id="lbName" class="hidden"><input id="lbInput" maxlength="18" placeholder="Your name for the board"><button class="btn" style="width:100%">Save my score</button></form><p class="muted" id="lbMsg" style="margin:6px 0 0;font-size:13px"></p></div>
   <a id="home" href="/">✏️ Made with Napkin Arcade</a>
 
@@ -105,6 +114,7 @@
       if (d.type === "game-start") $("lb").classList.add("hidden");
       if (d.type === "mp-state") ws?.readyState === 1 && ws.send(JSON.stringify({ t: "state", s: d.s }));
       if (d.type === "game-end") onGameEnd(d.result);
+      if (d.type === "mp-leave") { ws?.close(); history.replaceState(null, "", location.pathname); room = ""; $("board").classList.add("hidden"); $("results").classList.add("hidden"); }
       if (d.type === "mp-end") ws?.readyState === 1 && ws.send(JSON.stringify({ t: "end", result: d.result }));
     });
 
@@ -137,6 +147,18 @@
       pending = result; $("lbName").classList.remove("hidden"); $("lbInput").focus();
     }
     $("lbName").onsubmit = (e) => { e.preventDefault(); const n = $("lbInput").value.trim(); if (!n || !pending) return; try { localStorage.setItem("na_name", n); } catch {} $("lbName").classList.add("hidden"); submit(pending, n); pending = null; };
+    // Player feedback goes to the game's creator (AI-made games only).
+    if (!id.startsWith("example-")) $("fbBtn").classList.remove("hidden");
+    $("fbBtn").onclick = () => { $("fbBox").classList.remove("hidden"); $("fbMsg").textContent = ""; $("fbText").focus(); try { $("fbName").value = localStorage.getItem("na_name") || ""; } catch {} };
+    $("fbCancel").onclick = () => $("fbBox").classList.add("hidden");
+    $("fbForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const r = await fetch(`/api/projects/${encodeURIComponent(id)}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: $("fbText").value, name: $("fbName").value }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { $("fbMsg").textContent = j.error || "Couldn't send that."; return; }
+      $("fbText").value = ""; $("fbMsg").textContent = "Thanks! The creator will review it.";
+      setTimeout(() => $("fbBox").classList.add("hidden"), 1400);
+    };
     $("fs").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
 
     $("friends").onclick = async () => {

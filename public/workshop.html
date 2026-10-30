@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game workshop · Napkin Arcade</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .ws { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 16px; padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; min-width: 0; }
+    .titlebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .titlebar h2 { margin: 0; font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--ink); }
+    .pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: var(--panel2); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    a.btn, button.btn { text-decoration: none; font-weight: 700; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+    .btn.primary { background: var(--accent); border: none; color: #fff; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .tabs button { font-weight: 700; border-radius: 99px; padding: 7px 14px; }
+    .tabs button.on { background: var(--ink); color: var(--bg); }
+    .chat { height: 430px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px; }
+    .msg { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 14px; white-space: pre-wrap; line-height: 1.45; }
+    .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.studio { align-self: flex-start; background: var(--panel2); border-bottom-left-radius: 4px; }
+    .msg.feedback { align-self: center; background: transparent; border: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
+    .msg small { display: block; opacity: .7; font-size: 11px; margin-top: 4px; }
+    .compose { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+    .compose textarea { min-height: 54px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .chips button { font-size: 12.5px; padding: 5px 10px; border-radius: 99px; }
+    .progress { font-size: 13px; color: var(--muted); min-height: 20px; margin-top: 6px; }
+    .progress b { color: var(--accent); }
+    .fb { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+    .fb .meta { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px; }
+    .status { font-weight: 700; text-transform: uppercase; font-size: 11px; }
+    .status.pending { color: var(--amber); } .status.applied { color: var(--green); } .status.rejected { color: var(--muted); } .status.working, .status.approved { color: var(--blue); }
+    .versions { font-size: 13px; display: grid; gap: 6px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
+    .versions > div { display: grid; grid-template-columns: 36px 1fr auto auto; gap: 8px; align-items: center; background: var(--panel2); border-radius: 10px; padding: 6px 10px; border: 2px solid transparent; }
+    .versions > div.on { border-color: var(--accent); }
+    .versions button { font-size: 12px; padding: 4px 8px; }
+    .vbtns { display: flex; gap: 4px; }
+    .pill.live { background: var(--green); color: #fff; } .pill.draft { background: var(--amber); color: #fff; }
+    .err { color: var(--red); font-size: 13px; }
+    @media (max-width: 960px) { .ws { grid-template-columns: 1fr; } .chat { height: 340px; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><a class="logo" href="/" style="text-decoration:none">✏️🎮</a><div><h1>Game workshop</h1><p>Talk to the studio to keep improving your game. Approve player feedback to upgrade it.</p></div></div>
+    <div class="userbar"><a href="/studio#mine" class="ub">← My games</a><a href="/studio" class="ub">New game</a></div>
+  </header>
+
+  <main class="ws">
+    <section>
+      <div class="card">
+        <div class="titlebar"><h2 id="title">Loading…</h2><div class="row"><span class="pill" id="ver"></span><a class="btn primary" id="playLink" target="_blank" rel="noopener">▶ Play</a><a class="btn" id="friendsLink" target="_blank" rel="noopener">👥 Race friends</a></div></div>
+        <div class="frame"><iframe id="screen" sandbox="allow-scripts" title="Game preview"></iframe></div>
+        <p class="muted" style="margin:8px 0 0;font-size:13px"><b id="previewLabel"></b></p>
+        <p class="muted" id="tagline" style="margin:4px 0 0;font-size:14px"></p>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2 style="margin-top:0">Versions</h2>
+        <p class="muted" style="margin:-4px 0 8px;font-size:13px">Changes are saved as <b>drafts</b>; players keep the <b>live</b> version until you publish. Publish an older version to roll back.</p>
+        <div class="versions" id="versions"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tabs"><button id="tabChat" class="on">💬 Studio chat</button><button id="tabFb">📬 Player feedback <span id="fbCount"></span></button></div>
+      <div id="paneChat">
+        <div class="chat" id="chat"></div>
+        <div class="progress" id="progress"></div>
+        <form class="compose" id="compose"><textarea id="text" rows="2" placeholder="e.g. Make the traffic a little slower in stage 1, and add a boss truck in the last stage."></textarea><button class="btn primary" id="send">Send</button></form>
+        <div class="chips" id="chips"></div>
+        <p class="err" id="err"></p>
+      </div>
+      <div id="paneFb" hidden>
+        <p class="muted" style="margin:0 0 10px;font-size:13px">Players send feedback from the game's play page. Approve an item and the studio applies it as a new version; reject to dismiss it.</p>
+        <div id="feedback"></div>
+      </div>
+    </section>
+  </main>
+  <iframe id="lab" sandbox="allow-scripts" title="Test lab" hidden></iframe>
+  <script type="module" src="/workshop.js"></script>
+</body>
+</html>

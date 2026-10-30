@@ -1,0 +1,20 @@
+# Real-time studio events for a game. The server publishes with IAM; owners subscribe with Cognito.
+type StudioEvent @aws_iam @aws_cognito_user_pools {
+  gameId: ID!
+  owner: String!
+  payload: AWSJSON!
+}
+
+type Query {
+  ping: String @aws_iam @aws_cognito_user_pools
+}
+
+type Mutation {
+  publishStudioEvent(gameId: ID!, owner: String!, payload: AWSJSON!): StudioEvent @aws_iam
+}
+
+type Subscription {
+  onStudioEvent(gameId: ID!): StudioEvent
+    @aws_subscribe(mutations: ["publishStudioEvent"])
+    @aws_cognito_user_pools
+}

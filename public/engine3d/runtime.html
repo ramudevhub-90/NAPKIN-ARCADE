@@ -43,6 +43,11 @@
     #pause { position: absolute; top: 14px; right: 50%; margin-right: calc(-1 * min(19%, 170px) - 56px); width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: rgba(10,10,20,.45); color: #fff; font-size: 16px; cursor: pointer; pointer-events: auto; backdrop-filter: blur(10px); }
     #mute { position: absolute; top: 14px; right: 50%; margin-right: calc(-1 * min(19%, 170px) - 104px); width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: rgba(10,10,20,.45); color: #fff; font-size: 16px; cursor: pointer; pointer-events: auto; backdrop-filter: blur(10px); }
     #iBest { color: #ffd23f; font-weight: 800; margin: -6px 0 14px; min-height: 22px; }
+    .menu { display: grid; gap: 10px; justify-items: center; margin: 6px 0 16px; }
+    .menu .go { min-width: 240px; }
+    .mbtn { min-width: 240px; font: 700 16px Inter, sans-serif; color: #fff; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25); border-radius: 14px; padding: 11px 18px; cursor: pointer; }
+    .mbtn:hover { background: rgba(255,255,255,.18); }
+    .hint { font-size: 12px; opacity: .6; margin: 0; }
     #tag { position: absolute; left: 16px; bottom: 14px; font-size: 12px; font-weight: 700; opacity: .75; }
     #flashErr { position: absolute; left: 12px; right: 12px; bottom: 12px; color: #ff9aa8; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
   </style>
@@ -62,9 +67,11 @@
     <button id="pause" title="Pause (P / Esc)">⏸</button>
     <button id="mute" title="Sound on/off (M)">🔊</button>
   </div>
-  <div class="overlay hidden" id="paused"><div class="card"><h1>PAUSED</h1><p>Press P, Esc or tap to continue</p></div></div>
+  <div class="overlay hidden" id="paused"><div class="card"><h1>PAUSED</h1><p id="mTitle"></p>
+    <div class="menu"><button class="go" id="mResume">▶ RESUME</button><button class="mbtn" id="mRestart">↻ Restart</button><button class="mbtn" id="mQuit">⏹ Quit to title</button><button class="mbtn" id="mSound">🔊 Sound: on</button></div>
+    <div class="keys" id="mKeys"></div><p class="hint">P / Esc to resume · R to restart · M for sound</p></div></div>
   <div class="overlay hidden" id="intro"><div class="card"><h1 id="iTitle"></h1><p id="iPitch"></p><div id="iBest"></div><div class="keys" id="iKeys"></div><br><button class="go" id="iGo">▶ PLAY</button></div></div>
-  <div class="overlay hidden" id="end"><div class="card"><h1 id="eTitle"></h1><p id="eSub"></p><div class="stats" id="eStats"></div><button class="go" id="eGo">↻ PLAY AGAIN</button></div></div>
+  <div class="overlay hidden" id="end"><div class="card"><h1 id="eTitle"></h1><p id="eSub"></p><div class="stats" id="eStats"></div><button class="go" id="eGo">↻ PLAY AGAIN</button><br><button class="mbtn" id="eTitleBtn" style="margin-top:10px">⌂ Back to title</button></div></div>
   <div id="flashErr"></div>
   <script type="module" src="./host.js"></script>
 </body>

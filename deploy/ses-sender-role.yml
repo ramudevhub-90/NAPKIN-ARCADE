@@ -3,8 +3,8 @@ Description: Lets the Napkin Arcade server (another account) send sign-in emails
 
 Parameters:
   ServerRoleArn:
-    Type: String
-    Description: ARN of the Napkin Arcade EC2 instance role in the hosting account
+    Type: CommaDelimitedList
+    Description: Role ARNs in the hosting account allowed to send (the EC2 server role and the Cognito code-email Lambda role)
   FromDomain:
     Type: String
     Default: revenuerush.in

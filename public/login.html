@@ -51,30 +51,35 @@
     </form>
     <div class="msg" id="msg"></div>
   </main>
-  <script>
+  <script type="module">
+    // Amazon Cognito custom passwordless sign-in: email → 6-digit code → session.
+    import { startSignIn, answer } from "/cognito.js";
     const $ = (id) => document.getElementById(id);
     const next = new URLSearchParams(location.search).get("next") || "/studio";
     const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/studio";
     const say = (t, err) => { $("msg").textContent = t; $("msg").className = "msg" + (err ? " err" : ""); };
-    const post = async (url, body) => { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Something went wrong"); return j; };
+    let state = null;
     fetch("/api/auth/me").then((r) => r.json()).then((j) => { if (j.user) location.replace(safeNext); });
     $("step1").onsubmit = async (e) => {
       e.preventDefault(); $("send").disabled = true; say("Sending…");
       try {
-        const j = await post("/api/auth/code", { email: $("email").value });
+        state = await startSignIn($("email").value, "");
         $("step1").classList.add("hidden"); $("step2").classList.remove("hidden");
-        $("sentTo").textContent = `We sent a code to ${$("email").value.trim()}.`;
-        $("nameBox").classList.toggle("hidden", !j.newUser);
-        if (j.demo) { $("sentTo").textContent = "Judge account: enter the judge access code from the submission."; }
-        say(j.mail === "dev" ? "Dev mode: the code is printed in the server log." : "");
-        ($("nameBox").classList.contains("hidden") ? $("code") : $("name")).focus();
+        $("sentTo").textContent = state.judge ? "Judge account: enter the judge access code from the submission." : `We sent a code to ${state.email}.`;
+        $("nameBox").classList.add("hidden");
+        say(""); $("code").focus();
       } catch (err) { say(err.message, true); }
       $("send").disabled = false;
     };
     $("step2").onsubmit = async (e) => {
       e.preventDefault(); $("verify").disabled = true; say("Checking…");
-      try { await post("/api/auth/verify", { email: $("email").value, code: $("code").value, name: $("name").value }); location.replace(safeNext); }
-      catch (err) { say(err.message, true); $("verify").disabled = false; }
+      try {
+        const r = await answer(state, $("code").value);
+        if (!r.ok) { state.session = r.session; say(r.session ? "Wrong code. Check your email and try again." : "Too many wrong attempts. Ask for a new code.", true); if (!r.session) $("again").click(); $("verify").disabled = false; return; }
+        const s = await fetch("/api/auth/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: r.idToken, name: $("name").value }) });
+        if (!s.ok) throw new Error((await s.json()).error || "Sign-in failed");
+        location.replace(safeNext);
+      } catch (err) { say(err.code === "NotAuthorizedException" ? "That code expired. Ask for a new one." : err.message, true); $("verify").disabled = false; }
     };
     $("again").onclick = () => { $("step2").classList.add("hidden"); $("step1").classList.remove("hidden"); say(""); };
   </script>

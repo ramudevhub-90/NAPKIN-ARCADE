@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "./env.js";
 
-const DATA = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "data");
+const DATA = process.env.DATA_DIR || path.join(path.dirname(new URL(import.meta.url).pathname), "..", "data");
 const LEDGER = path.join(DATA, "usage.jsonl");
 const CACHE = path.join(DATA, "cache");
 fs.mkdirSync(CACHE, { recursive: true });
@@ -31,6 +31,8 @@ if (fs.existsSync(LEDGER)) {
 const listeners = new Set();
 export const onSpend = (fn) => (listeners.add(fn), () => listeners.delete(fn));
 export const spending = () => ({ totalUsd: totalSpent, hardCapUsd: config.hardCapUsd });
+// Serverless: the running total comes from the database at the start of each job.
+export const setSpentBase = (usd) => { totalSpent = Math.max(totalSpent, +usd || 0); };
 
 export class BudgetError extends Error {}
 
@@ -98,7 +100,7 @@ export async function chat({ role, messages, maxTokens = 2000, temperature = 0.6
     ts: new Date().toISOString(), model, purpose, promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens,
     cost: +cost.toFixed(6), ms: Date.now() - t0,
   }) + "\n");
-  for (const fn of listeners) fn(spending());
+  for (const fn of listeners) fn({ ...spending(), delta: cost });
 
   const out = { text, thinking: thinking || msg.reasoning_content || "", usage };
   if (config.useCache) fs.writeFileSync(cacheFile, JSON.stringify(out));

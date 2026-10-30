@@ -4,17 +4,19 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import { config } from "./env.js";
-import { chat, parseJson, resolveModels, spending, onSpend, BudgetError } from "./llm.js";
-import { runStudio } from "./studio3d.js";
+import { chat, parseJson, resolveModels, spending, onSpend, setSpentBase, BudgetError } from "./llm.js";
+import { runStudio, runRevision } from "./studio3d.js";
 import { actMessages3d, PERSONAS, testerSummaryMessages } from "./prompts3d.js";
-import { requestCode, verifyCode, logout, me, currentUser, chargeBuild, mailMode } from "./auth.js";
+import { startSession, logout, me, currentUser, chargeBuild, chargeRevision, cognitoConfig } from "./cognito.js";
 import { createRoom, handleUpgrade } from "./rooms.js";
-import { topScores, submitScore } from "./scores.js";
+import * as store from "../aws/lib/store.mjs";
+import { publishStudioEvent } from "../aws/lib/appsync.mjs";
 
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), "..");
 const PUBLIC = path.join(ROOT, "public");
-const PROJECTS = path.join(ROOT, "data", "projects");
+const PROJECTS = path.join(ROOT, "data", "projects"); // local cache of studio event logs only
 fs.mkdirSync(PROJECTS, { recursive: true });
+const APPSYNC = !!process.env.APPSYNC_URL;
 const NO_THINK = { chat_template_kwargs: { enable_thinking: false } };
 
 const live = new Map(); // id -> { events, clients, done, budget, playtest }
@@ -22,33 +24,25 @@ const starts = [];
 let ready = false;
 
 const pdir = (id) => path.join(PROJECTS, id);
-const save = (id, name, data) => fs.writeFileSync(path.join(pdir(id), name), typeof data === "string" ? data : JSON.stringify(data));
+const save = (id, name, data) => { fs.mkdirSync(pdir(id), { recursive: true }); fs.writeFileSync(path.join(pdir(id), name), typeof data === "string" ? data : JSON.stringify(data)); };
 const load = (id, name) => { const f = path.join(pdir(id), name); return fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null; };
 
 function emitTo(p, ev) {
   const e = { ...ev, ts: Date.now() };
   p.events.push(e);
   for (const res of p.clients) res.write(`data: ${JSON.stringify(e)}\n\n`);
+  // Owners also receive every event over AppSync (Cognito-authenticated, owner-filtered).
+  if (APPSYNC && p.ownerSub) publishStudioEvent(p.id, p.ownerSub, e).catch((err) => console.error("AppSync publish:", err.message));
 }
-onSpend((s) => { for (const p of live.values()) if (!p.done) emitTo(p, { type: "spend", ...s, project: +p.budget.spent.toFixed(5) }); });
+onSpend((s) => {
+  if (s.delta) store.addSpend(s.delta).catch(() => {});
+  for (const p of live.values()) if (!p.done) emitTo(p, { type: "spend", ...s, project: +p.budget.spent.toFixed(5) });
+});
 
-function createProject({ idea, image, user }) {
-  if (!ready) throw Object.assign(new Error("The studio needs a Nebius API key on the server. Try a showcase game instead."), { status: 503 });
-  const now = Date.now();
-  while (starts.length && now - starts[0] > 3600e3) starts.shift();
-  if (starts.length >= config.liveRunsPerHour) throw Object.assign(new Error("The studio is busy this hour. Try a showcase game instead."), { status: 429 });
-  if (!idea && !image) throw Object.assign(new Error("Draw something or type an idea first."), { status: 400 });
-  chargeBuild(user);
-  starts.push(now);
-  const id = crypto.randomBytes(4).toString("hex");
-  fs.mkdirSync(pdir(id));
-  const hasDrawing = typeof image === "string" && image.startsWith("data:image/");
-  if (hasDrawing) save(id, "drawing.txt", image);
-  save(id, "meta.json", { id, idea: idea || "", hasDrawing, created: new Date().toISOString(), owner: user.email, ownerName: user.name });
-
-  const p = { id, events: [], clients: new Set(), done: false, budget: { spent: 0, cap: config.campaignCapUsd }, tasks: {} };
+// A studio job (new game or revision): live events over SSE, browser tasks for sandboxed tests.
+function startJob(id, ownerSub, work, onDone, eventsFile) {
+  const p = { id, ownerSub, events: [], clients: new Set(), done: false, budget: { spent: 0, cap: config.campaignCapUsd }, tasks: {} };
   live.set(id, p);
-  const project = { id, idea: idea || "", hasDrawing, image: hasDrawing ? image : null };
   // Game code runs only in the browser's sandboxed iframes: the server hands out tasks and waits.
   const browser = (kind, data, timeout = 240e3) => new Promise((resolve) => {
     const taskId = crypto.randomBytes(5).toString("hex");
@@ -57,18 +51,70 @@ function createProject({ idea, image, user }) {
     setTimeout(() => { if (p.tasks[taskId]) { delete p.tasks[taskId]; resolve(null); } }, timeout);
   });
   (async () => {
-    try {
-      const out = await runStudio({ project, budget: p.budget, emit: (e) => emitTo(p, e), browser });
-      save(id, "game3d.json", { ...out.payload, design: out.design, score: out.total });
-    } catch (e) {
+    try { await onDone(await work({ budget: p.budget, emit: (e) => emitTo(p, e), browser }), p); }
+    catch (e) {
       emitTo(p, { type: "error", text: e instanceof BudgetError ? `Stopped by spending guardrail: ${e.message}` : e.message });
+      try { await onDone(null, p, e); } catch {}
     }
     emitTo(p, { type: "done", projectCost: +p.budget.spent.toFixed(5), ...spending() });
     p.done = true;
-    save(id, "events.json", p.events.filter((e) => e.type !== "task"));
+    if (eventsFile) save(id, eventsFile, p.events.filter((e) => e.type !== "task"));
     for (const res of p.clients) res.end();
     p.clients.clear();
   })();
+  return p;
+}
+
+// ---- Workshop: chat with memory, versions, player feedback (DynamoDB + S3) ----
+async function ownedGame(req, id) {
+  const user = await currentUser(req);
+  if (!user) throw Object.assign(new Error("Please sign in."), { status: 401 });
+  const meta = await store.getGame(id);
+  if (!meta) throw Object.assign(new Error("Game not found."), { status: 404 });
+  if (meta.owner !== user.sub) throw Object.assign(new Error("Only the game's creator can do this."), { status: 403 });
+  if (meta.status !== "ready") throw Object.assign(new Error("This game hasn't finished building yet."), { status: 409 });
+  return { user, meta, game: await store.getPayload(id, meta.version) }; // latest version: changes stack on drafts
+}
+async function syncPending(id) {
+  const n = (await store.feedback(id)).filter((f) => f.status === "pending").length;
+  await store.updateGame(id, { pendingFeedback: n });
+}
+async function startRevision(id, user, meta, game, request, source, feedbackId = null) {
+  if (!ready) throw Object.assign(new Error("The studio is offline."), { status: 503 });
+  if (live.get(id) && !live.get(id).done) throw Object.assign(new Error("The studio is already working on this game. Wait for it to finish."), { status: 409 });
+  await chargeRevision(user);
+  const history = await store.chat(id);
+  return startJob(id, user.sub, (ctx) => runRevision({ current: game, design: game.design, changelog: meta.changelog || [], history, request, source, ...ctx }), async (out, p, err) => {
+    const setFb = async (status) => { if (feedbackId) { await store.setFeedback(id, feedbackId, status); await syncPending(id); } };
+    if (!out) { await store.addChat(id, { role: "studio", text: `That change didn't work out: ${err?.message || "unknown error"}. The game is unchanged.` }); await setFb("approved"); return; }
+    if (!out.changed) { await store.addChat(id, { role: "studio", text: out.reply }); return; }
+    const next = { ...out.payload, design: game.design, score: out.after };
+    const v = await store.saveVersion(id, next, out.summary, out.after); // a draft: players keep the live version
+    await store.addChat(id, { role: "studio", text: `${out.reply}\n📝 Saved as draft version ${v} (bot fun score ${out.before} → ${out.after}). Players still see the live version — preview the draft, then press Publish when you're happy.`, version: v, before: out.before, after: out.after });
+    await setFb("applied");
+    emitTo(p, { type: "revised", version: v, draft: true, before: out.before, after: out.after, summary: out.summary });
+  });
+}
+const fbHits = new Map();
+
+async function createProject({ idea, image, user }) {
+  if (!ready) throw Object.assign(new Error("The studio needs a Nebius API key on the server. Try a showcase game instead."), { status: 503 });
+  const now = Date.now();
+  while (starts.length && now - starts[0] > 3600e3) starts.shift();
+  if (starts.length >= config.liveRunsPerHour) throw Object.assign(new Error("The studio is busy this hour. Try a showcase game instead."), { status: 429 });
+  if (!idea && !image) throw Object.assign(new Error("Draw something or type an idea first."), { status: 400 });
+  await chargeBuild(user);
+  starts.push(now);
+  const id = store.newId(4);
+  const hasDrawing = typeof image === "string" && image.startsWith("data:image/") && (await store.putDrawing(id, image));
+  const meta = { id, idea: idea || "", hasDrawing: !!hasDrawing, owner: user.sub, ownerName: user.name, status: "building", createdAt: new Date().toISOString() };
+  await store.putGameMeta(meta);
+  startJob(id, user.sub, (ctx) => runStudio({ project: { id, idea: idea || "", hasDrawing: !!hasDrawing, image: hasDrawing ? image : null }, ...ctx }), async (out, p, err) => {
+    if (!out) { await store.updateGame(id, { status: "failed", error: String(err?.message || "").slice(0, 300) }); return; }
+    const game = { ...out.payload, design: out.design, score: out.total };
+    await store.putGameMeta({ ...meta, status: "ready", title: game.title || out.design?.title, tagline: game.pitch || out.design?.tagline || "", preset: out.design?.preset || null, score: out.total });
+    await store.saveVersion(id, game, "First version, built by the studio", out.total, { publish: true });
+  }, "events.json");
   return id;
 }
 
@@ -81,58 +127,62 @@ async function body(req, limit = 4e6) {
   return JSON.parse(b || "{}");
 }
 
-function listProjects(filter) {
-  const out = [];
-  for (const id of fs.readdirSync(PROJECTS)) {
-    const m = JSON.parse(load(id, "meta.json") || "null"); if (!m) continue;
-    const graw = load(id, "game3d.json"), g = graw ? JSON.parse(graw) : null;
-    if (!filter(m, g)) continue;
-    out.push({ id, idea: m.idea, created: m.created, by: m.ownerName || "Napkin Arcade", ready: !!g, title: g?.title || g?.design?.title || null, tagline: g?.pitch || g?.design?.tagline || "", preset: g?.design?.preset || null, score: g?.score ?? null });
-  }
-  return out.sort((a, b) => String(b.created).localeCompare(String(a.created)));
-}
+const gameCard = (m) => ({ id: m.id, idea: m.idea, created: m.createdAt, by: m.ownerName || "Napkin Arcade", ready: m.status === "ready", status: m.status, version: m.version || 0, pendingFeedback: m.pendingFeedback || 0, title: m.title || null, tagline: m.tagline || "", preset: m.preset || null, score: m.score ?? null });
+const knownGame = async (g) => /^example-[a-z]+$/.test(g || "") || (/^[a-z0-9]+$/.test(g || "") && (await store.getGame(g))?.status === "ready");
+const scoreHits = new Map();
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const parts = url.pathname.split("/").filter(Boolean);
   try {
     if (url.pathname === "/api/status") return json(res, 200, { live: ready, models: config.models, ...spending(), projectCapUsd: config.campaignCapUsd, publicUrl: process.env.PUBLIC_URL || null });
+    // Public client config: Cognito pool/client and the AppSync endpoint.
+    if (url.pathname === "/api/config") return json(res, 200, { cognito: cognitoConfig, appsync: APPSYNC ? { url: process.env.APPSYNC_URL, realtime: process.env.APPSYNC_URL.replace("https://", "wss://").replace("appsync-api", "appsync-realtime-api") } : null });
 
-    // ---- accounts (email one-time codes) ----
-    if (url.pathname === "/api/auth/code" && req.method === "POST") return json(res, 200, await requestCode(await body(req, 1e4)));
-    if (url.pathname === "/api/auth/verify" && req.method === "POST") return json(res, 200, { user: verifyCode(res, await body(req, 1e4)) });
-    if (url.pathname === "/api/auth/logout" && req.method === "POST") { logout(req, res); return json(res, 200, { ok: true }); }
-    if (url.pathname === "/api/auth/me") return json(res, 200, { user: me(req), mail: mailMode });
+    // ---- accounts: Amazon Cognito (custom passwordless auth) → session cookie ----
+    if (url.pathname === "/api/auth/session" && req.method === "POST") return json(res, 200, { user: await startSession(res, await body(req, 2e4)) });
+    if (url.pathname === "/api/auth/logout" && req.method === "POST") { await logout(req, res); return json(res, 200, { ok: true }); }
+    if (url.pathname === "/api/auth/me") return json(res, 200, { user: await me(req) });
 
     if (url.pathname === "/api/projects" && req.method === "POST") {
-      const user = currentUser(req);
+      const user = await currentUser(req);
       if (!user) return json(res, 401, { error: "Please sign in to create games." });
       const b = await body(req);
-      return json(res, 200, { id: createProject({ idea: String(b.idea || "").slice(0, 600), image: b.image, user }) });
+      return json(res, 200, { id: await createProject({ idea: String(b.idea || "").slice(0, 600), image: b.image, user }) });
     }
     if (url.pathname === "/api/my/projects") {
-      const user = currentUser(req);
+      const user = await currentUser(req);
       if (!user) return json(res, 401, { error: "Please sign in." });
-      return json(res, 200, { projects: listProjects((m) => m.owner === user.email) });
+      return json(res, 200, { projects: (await store.myGames(user.sub)).map(gameCard) });
     }
-    if (url.pathname === "/api/gallery") return json(res, 200, { games: listProjects((m, g) => !!g).slice(0, 24) });
+    if (url.pathname === "/api/gallery") return json(res, 200, { games: (await store.gallery(24)).map(gameCard) });
     if (url.pathname === "/api/scores") {
       const game = url.searchParams.get("game") || "";
-      const known = /^example-[a-z]+$/.test(game) || (/^[a-z0-9]+$/.test(game) && load(game, "game3d.json"));
-      if (!known) return json(res, 404, { error: "Game not found" });
-      if (req.method === "POST") return json(res, 200, submitScore(game, await body(req, 1e4), req.socket.remoteAddress));
-      return json(res, 200, { top: topScores(game) });
+      if (!(await knownGame(game))) return json(res, 404, { error: "Game not found" });
+      if (req.method === "POST") {
+        const ip = req.socket.remoteAddress, now = Date.now(), hits = (scoreHits.get(ip) || []).filter((t) => now - t < 60e3);
+        if (hits.length >= 12) return json(res, 429, { error: "Too many scores — slow down." });
+        scoreHits.set(ip, [...hits, now]);
+        const b = await body(req, 1e4);
+        const entry = { name: String(b.name || "Player").replace(/[<>]/g, "").trim().slice(0, 18) || "Player", score: Math.max(0, Math.min(1e7, Math.round(+b.score || 0))), progress: Math.max(0, Math.min(1, +b.progress || 0)), won: b.won ? 1 : 0, time: Math.max(0, Math.min(3600, +b.time || 0)) };
+        await store.addScore(game, entry);
+        const top = await store.topScores(game, 100);
+        const rank = top.findIndex((t) => t.name === entry.name && t.score === entry.score) + 1 || null;
+        return json(res, 200, { rank, top: top.slice(0, 10) });
+      }
+      return json(res, 200, { top: await store.topScores(game, 10) });
     }
     if (url.pathname === "/api/rooms" && req.method === "POST") {
       const b = await body(req, 1e4);
-      const ok = /^example-[a-z]+$/.test(b.game || "") || (/^[a-z0-9]+$/.test(b.game || "") && load(b.game, "game3d.json"));
-      if (!ok) return json(res, 404, { error: "Game not found" });
+      if (!(await knownGame(b.game))) return json(res, 404, { error: "Game not found" });
       return json(res, 200, { room: createRoom(b.game) });
     }
 
     if (parts[0] === "api" && parts[1] === "projects" && /^[a-z0-9-]+$/.test(parts[2] || "")) {
       const id = parts[2], p = live.get(id), what = parts[3];
       if (what === "events") {
+        // Live events (with studio tasks) go only to the game's owner.
+        if (p?.ownerSub && (await currentUser(req))?.sub !== p.ownerSub) return json(res, 403, { error: "Only the game's creator can watch the studio." });
         const events = p ? p.events : JSON.parse(load(id, "events.json") || "null");
         if (!events) return json(res, 404, { error: "not found" });
         res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
@@ -142,9 +192,61 @@ const server = http.createServer(async (req, res) => {
         req.on("close", () => p.clients.delete(res));
         return;
       }
+      if (what === "workshop") {
+        const { meta, game } = await ownedGame(req, id);
+        const [versions, chatLog, fb] = await Promise.all([store.versions(id), store.chat(id), store.feedback(id)]);
+        return json(res, 200, { id, title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at }) => ({ id, text, name, status, at })), busy: !!(p && !p.done) });
+      }
+      if (what === "chat" && req.method === "POST") {
+        const { user, meta, game } = await ownedGame(req, id);
+        const text = String((await body(req, 2e4)).text || "").trim().slice(0, 1500);
+        if (!text) return json(res, 400, { error: "Type what you'd like to change." });
+        await startRevision(id, user, meta, game, text, "owner");
+        await store.addChat(id, { role: "user", text });
+        return json(res, 200, { ok: true });
+      }
+      // Publish a version (draft or older) to every player; this is also how rollback works.
+      if (what === "publish" && req.method === "POST") {
+        const { meta } = await ownedGame(req, id);
+        const v = Math.round(+(await body(req, 1e3)).version);
+        if (!(v >= 1 && v <= meta.version)) return json(res, 404, { error: "No such version." });
+        await store.publishVersion(id, v);
+        await store.addChat(id, { role: "studio", text: `🚀 Version ${v} is now live for every player.`, version: v });
+        return json(res, 200, { ok: true, liveVersion: v });
+      }
+      // The owner's preview of any version, including drafts (players only ever get the live one).
+      if (what === "version" && /^\d+$/.test(parts[4] || "")) {
+        const { meta } = await ownedGame(req, id);
+        const v = +parts[4];
+        if (!(v >= 1 && v <= meta.version)) return json(res, 404, { error: "No such version." });
+        return json(res, 200, await store.getPayload(id, v));
+      }
+      if (what === "feedback" && req.method === "POST" && !parts[4]) {
+        if ((await store.getGame(id))?.status !== "ready") return json(res, 404, { error: "Game not found." });
+        const ip = req.socket.remoteAddress, now = Date.now(), hits = (fbHits.get(ip) || []).filter((t) => now - t < 3600e3);
+        if (hits.length >= 8) return json(res, 429, { error: "Thanks! You've sent a lot of feedback this hour." });
+        fbHits.set(ip, [...hits, now]);
+        const b = await body(req, 1e4), text = String(b.text || "").trim().slice(0, 600);
+        if (text.length < 3) return json(res, 400, { error: "Tell us a bit more." });
+        const name = String((await currentUser(req))?.name || b.name || "Player").replace(/[<>]/g, "").slice(0, 30);
+        await store.addFeedback(id, text, name);
+        await syncPending(id);
+        return json(res, 200, { ok: true });
+      }
+      if (what === "feedback" && req.method === "POST" && parts[4]) {
+        const { user, meta, game } = await ownedGame(req, id);
+        const action = (await body(req, 1e3)).action;
+        const f = (await store.feedback(id)).find((x) => x.id === parts[4]);
+        if (!f) return json(res, 404, { error: "Feedback not found." });
+        if (action === "reject") { await store.setFeedback(id, f.id, "rejected"); await syncPending(id); return json(res, 200, { ok: true }); }
+        if (action !== "approve" || f.status !== "pending") return json(res, 400, { error: "Nothing to do." });
+        await startRevision(id, user, meta, game, f.text, "feedback", f.id);
+        await store.setFeedback(id, f.id, "working"); await syncPending(id);
+        await store.addChat(id, { role: "feedback", text: `${f.name}: ${f.text}` });
+        return json(res, 200, { ok: true });
+      }
       if (what === "game3d") {
-        const g = load(id, "game3d.json");
-        return g ? json(res, 200, JSON.parse(g)) : json(res, 404, { error: "This game is not ready yet." });
+        try { return json(res, 200, await store.getPayload(id)); } catch { return json(res, 404, { error: "This game is not ready yet." }); }
       }
       if (what === "task" && req.method === "POST" && p) {
         const b = await body(req, 3e6);
@@ -153,8 +255,7 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { ok: !!done });
       }
       if (what === "drawing") {
-        const d = load(id, "drawing.txt");
-        if (!d) return json(res, 404, { error: "no drawing" });
+        let d; try { d = await store.getDrawing(id); } catch { return json(res, 404, { error: "no drawing" }); }
         const m = d.match(/^data:(image\/[a-z+]+);base64,(.*)$/);
         res.writeHead(200, { "Content-Type": m[1], "Cache-Control": "max-age=3600" });
         return res.end(Buffer.from(m[2], "base64"));
@@ -191,8 +292,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/") return page("landing.html");
     if (url.pathname === "/login") return page("login.html");
     if (url.pathname === "/arcade") return page("arcade.html");
+    if (parts[0] === "studio" && parts[1] === "game" && /^[a-z0-9]+$/.test(parts[2] || "")) {
+      if (!(await currentUser(req))) { res.writeHead(302, { Location: `/login?next=${encodeURIComponent(url.pathname)}` }); return res.end(); }
+      return page("workshop.html");
+    }
     if (url.pathname === "/studio") {
-      if (!currentUser(req)) { res.writeHead(302, { Location: "/login?next=/studio" }); return res.end(); }
+      if (!(await currentUser(req))) { res.writeHead(302, { Location: "/login?next=/studio" }); return res.end(); }
       return page("studio.html");
     }
     // Play pages: /play/<id>
@@ -226,10 +331,11 @@ const server = http.createServer(async (req, res) => {
     try { console.log("Token Factory models:", await resolveModels()); ready = true; }
     catch (e) { console.error("Token Factory unavailable:", e.message); }
   } else console.log("No NEBIUS_API_KEY set: studio disabled (showcase games still playable).");
+  try { setSpentBase(await store.totalSpend()); } catch (e) { console.error("Spend total unavailable:", e.message); }
   console.log(`Spent so far: $${spending().totalUsd.toFixed(4)} of $${config.hardCapUsd} hard cap`);
   server.on("upgrade", (req, socket, head) => {
     if (!req.url.startsWith("/ws")) return socket.destroy();
-    handleUpgrade(req, socket, head, currentUser(req)?.name);
+    currentUser(req).then((u) => handleUpgrade(req, socket, head, u?.name), () => handleUpgrade(req, socket, head, null));
   });
   server.listen(config.port, () => console.log(`Napkin Arcade on http://localhost:${config.port}`));
 })();

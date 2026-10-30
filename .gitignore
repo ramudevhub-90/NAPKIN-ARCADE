@@ -6,3 +6,6 @@ video/out/
 video/node_modules/
 *.log
 public/media/
+infra/node_modules/
+infra/cdk.out/
+aws/outputs.json

@@ -196,7 +196,7 @@ function showFinal(e) {
   $("final").classList.remove("hidden");
   $("final").innerHTML = `<div><h2>Your game is live</h2><div class="big">“${esc(e.payload.title)}” · fun score ${e.total}/100</div>
     <p class="muted">${esc(e.design?.tagline || "")}</p>
-    <a class="play" href="${url}" target="_blank" rel="noopener">▶ Play now</a><code>${esc(url)}</code>
+    <a class="play" href="${url}" target="_blank" rel="noopener">▶ Play now</a><a class="play" style="background:var(--panel2);color:var(--ink)" href="/studio/game/${project}">💬 Keep improving it</a><code>${esc(url)}</code>
     <ul>${(e.design?.stages || []).map((s) => `<li>${esc(s)}</li>`).join("")}</ul></div><div id="qr"></div>`;
   if (window.qrcode) { const q = qrcode(0, "M"); q.addData(url); q.make(); $("qr").innerHTML = q.createSvgTag({ cellSize: 4, margin: 2 }); }
   showOnScreen(e.payload, `“${e.payload.title}” — final build ${e.build}`);
@@ -227,9 +227,9 @@ async function loadMe() {
   if (!user) return location.replace("/login?next=/studio");
   $("who").textContent = `${user.name} · ${Math.max(0, user.dailyBuilds - user.buildsToday)} of ${user.dailyBuilds} builds left today`;
   const { projects = [] } = await (await fetch("/api/my/projects")).json();
-  if (projects.length) $("myGames").innerHTML = projects.map((p) => `<a href="${p.ready ? `/play/${p.id}` : "#"}" ${p.ready ? 'target="_blank" rel="noopener"' : ""}><b>${esc(p.title || "Unfinished build")}</b><span>${esc(p.tagline || p.idea)}</span><span>${new Date(p.created).toLocaleString()}${p.score != null ? ` · fun ${p.score}` : ""}</span></a>`).join("");
+  if (projects.length) $("myGames").innerHTML = projects.map((p) => `<a href="${p.ready ? `/studio/game/${p.id}` : "#"}"><b>${esc(p.title || (p.status === "failed" ? "Build failed" : "Building…"))}</b><span>${esc(p.tagline || p.idea)}</span><span>${new Date(p.created).toLocaleString()}${p.ready ? ` · v${p.version}` : ""}${p.score != null ? ` · fun ${p.score}` : ""}${p.pendingFeedback ? ` · <b style="color:var(--accent)">📬 ${p.pendingFeedback} new feedback</b>` : ""}</span></a>`).join("");
 }
-$("logout").onclick = async () => { await fetch("/api/auth/logout", { method: "POST" }); location.href = "/"; };
+$("logout").onclick = async () => { await fetch("/api/auth/logout", { method: "POST" }); try { localStorage.removeItem("na_tokens"); } catch {} location.href = "/"; };
 loadMe();
 
 (async () => {

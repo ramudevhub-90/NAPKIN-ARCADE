@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const EX = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "public", "engine3d", "examples");
+const EX = process.env.EXAMPLES_DIR || path.join(path.dirname(new URL(import.meta.url).pathname), "..", "public", "engine3d", "examples");
 export const TEMPLATES = {
   runner: { file: "runner.js", about: "lane runner / racer / endless runner: auto-forward along -Z, change lanes, jump, traffic & obstacles, finish line" },
   flyer: { file: "flyer.js", about: "flying / swimming / space: auto-forward, steer in X and Y, fly through rings, dodge obstacles" },
@@ -187,5 +187,41 @@ export function testerSummaryMessages(persona, spec, log) {
   return [
     { role: "system", content: `Summarize a playtest session as the playtester, in character. Respond ONLY with JSON: {"fun": 1-10, "liked": "one sentence", "frustrated": "one sentence or empty", "suggestion": "one concrete change"}` },
     { role: "user", content: `Playtester: ${persona.style}\nGame: ${spec.title}\nSession log (thoughts, actions and what happened):\n${log.join("\n")}` },
+  ];
+}
+
+// ---- Conversational revisions (owner chat or approved player feedback) ----
+export function changePlanMessages({ design, tuning, models, changelog, history, request, source }) {
+  return [
+    { role: "system", content: `You are the studio lead of an AI game studio, working with the game's creator on an existing 3D game. You remember the conversation and every change already made.
+Turn the latest request into a concrete change plan for the team:
+- Prefer TUNING changes (numbers) when they fully satisfy the request.
+- Use a code change for new mechanics, entities, rules, stages, power-ups, visuals in code, or bug fixes. Describe it precisely so a developer can implement it in the existing module.
+- Use an art change to restyle or rebuild existing 3D models (by exact model name).
+- If the request is unclear, contradictory or impossible, ask ONE short clarifying question instead (kind "question").
+- "Undo"/"revert" requests: describe how to restore the earlier behavior from the changelog.
+${source === "feedback" ? "This request is PLAYER FEEDBACK the creator approved: keep the creator's vision; fix the underlying problem the player describes." : ""}
+Respond ONLY with JSON: {"kind": "tuning|code|art|mixed|question", "reply": "friendly 1-3 sentence message to the creator saying what you'll do (or your question)", "summary": "one line for the changelog", "tuning": {"key": number}, "codePlan": "precise implementation instructions, or empty", "art": [{"name": "exact model name", "change": "what to change"}]}` },
+    { role: "user", content: `Game design: ${JSON.stringify(design || {})}
+Current TUNING overrides: ${JSON.stringify(tuning || {})}
+3D models: ${(models || []).map((m) => m.name).join(", ") || "built-ins only"}
+Changelog so far:\n${(changelog || []).map((c, i) => `${i + 1}. ${c}`).join("\n") || "(none — first version)"}
+Recent conversation:\n${(history || []).slice(-12).map((m) => `${m.role === "user" ? "Creator" : m.role === "feedback" ? "Player feedback" : "Studio"}: ${m.text}`).join("\n") || "(none)"}
+
+Latest request: ${request}` },
+  ];
+}
+
+export function modifyCodeMessages(code, plan, design) {
+  return [
+    { role: "system", content: `You are a senior gameplay engineer changing an existing game module for the Napkin Arcade 3D runtime.\n\n${API_DOC}\n\nImplement exactly the requested change. Keep everything else working as before (controls, finish/win, spawning, progress, juice). Add any new numbers to TUNING. Declare every variable you use. Respond with ONLY the complete updated module in one \`\`\`js code block.` },
+    { role: "user", content: `Game: ${design?.title || ""} — ${design?.tagline || ""}\nChange to implement:\n${plan}\n\nCurrent code:\n\`\`\`js\n${code}\n\`\`\`` },
+  ];
+}
+
+export function modifyModelsMessages(design, models, changes, examples = []) {
+  return [
+    ...artistMessages(design || {}, examples).slice(0, 1),
+    { role: "user", content: `Change these existing models as requested and return them in full:\n${changes.map((c) => `- "${c.name}": ${c.change}\n  Current: ${JSON.stringify(models.find((m) => m.name === c.name) || null)}`).join("\n")}\nRespond ONLY with JSON: {"models": [ ... ]}` },
   ];
 }

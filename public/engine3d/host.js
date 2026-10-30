@@ -127,10 +127,29 @@ function togglePause(force) {
   userPaused = force ?? !userPaused;
   $("pause").textContent = userPaused ? "▶" : "⏸";
   $("paused").classList.toggle("hidden", !userPaused);
+  if (userPaused) {
+    const M = meta();
+    $("mTitle").textContent = M.title || payload?.title || "";
+    $("mKeys").innerHTML = [M.controlsText || (M.controls === "lanes" ? "← → change lane" : "Arrows / WASD to move"), M.action && M.action !== "none" ? `Space: ${M.action}` : ""].filter(Boolean).map((k) => `<span>${k}</span>`).join("");
+    $("mSound").textContent = sfx.muted ? "🔇 Sound: off" : "🔊 Sound: on";
+    $("mRestart").hidden = mode !== "play";
+    $("mQuit").textContent = mp ? "🚪 Leave race" : "⏹ Quit to title";
+    $("mQuit").hidden = mode !== "play";
+  }
 }
 $("pause").onclick = (e) => { e.stopPropagation(); togglePause(); };
 $("mute").onclick = (e) => { e.stopPropagation(); sfx.unlock(); sfx.muted = !sfx.muted; $("mute").textContent = sfx.muted ? "🔇" : "🔊"; };
-$("paused").onclick = () => togglePause(false);
+// In-game menu (every game): resume, restart, quit, sound.
+$("paused").onclick = (e) => { if (e.target === $("paused")) togglePause(false); };
+$("mResume").onclick = () => { sfx.play("click"); togglePause(false); };
+$("mRestart").onclick = () => { togglePause(false); again(); };
+$("mQuit").onclick = () => {
+  togglePause(false);
+  if (mp) { parent.postMessage({ type: "mp-leave" }, "*"); mp = null; return start("view"); }
+  showIntro();
+};
+$("mSound").onclick = () => { sfx.unlock(); sfx.muted = !sfx.muted; $("mute").textContent = sfx.muted ? "🔇" : "🔊"; $("mSound").textContent = sfx.muted ? "🔇 Sound: off" : "🔊 Sound: on"; };
+$("eTitleBtn").onclick = () => { $("end").classList.add("hidden"); showIntro(); };
 
 // ---------- game loop ----------
 let last = performance.now(), acc = 0;

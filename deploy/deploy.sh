@@ -20,6 +20,11 @@ BUCKET=$(out Bucket); IID=$(out InstanceId); IP=$(out PublicIp); NS=$(out NameSe
 echo "▶ App settings → SSM Parameter Store (encrypted; never in git)…"
 ENV_BODY=$({ grep -E '^(NEBIUS_API_KEY|NEBIUS_BASE_URL|MODEL_[A-Z]+|HARD_CAP_USD|CAMPAIGN_CAP_USD|LIVE_RUNS_PER_HOUR|DAILY_BUILDS_PER_USER|DEMO_LOGIN_EMAIL|DEMO_LOGIN_CODE|DEMO_DAILY_BUILDS)=' .env || true
   echo "MAIL_PROVIDER=ses"; echo "AWS_REGION=$REGION"
+  # Serverless backbone (infra/ CDK stack): DynamoDB, S3, Cognito, AppSync.
+  if [ -f aws/outputs.json ]; then node -e '
+    const o = require("./aws/outputs.json").NapkinArcadeServerless || {};
+    const m = { TABLE: o.TableName, BUCKET: o.BucketName, COGNITO_POOL_ID: o.UserPoolId, COGNITO_CLIENT_ID: o.UserPoolClientId, APPSYNC_URL: o.GraphqlUrl, JUDGE_EMAIL: "ramu@mobil80.com", PUBLIC_URL: "https://'"$DOMAIN"'" };
+    for (const [k, v] of Object.entries(m)) if (v) console.log(`${k}=${v}`);'; fi
   if [ -n "${SES_ROLE_ARN:-}" ]; then echo "SES_ROLE_ARN=$SES_ROLE_ARN"; echo "MAIL_FROM=Napkin Arcade <${MAIL_FROM_ADDRESS:-no-reply@revenuerush.in}>"; echo "SES_REGION=${SES_REGION:-$REGION}";
   else echo "MAIL_FROM=Napkin Arcade <no-reply@$DOMAIN>"; fi; })
 aws ssm put-parameter --name /napkin-arcade/env --type SecureString --overwrite --value "$ENV_BODY" >/dev/null
@@ -28,7 +33,7 @@ echo "▶ Bundling and uploading the app…"
 VER=$(date +%Y%m%d%H%M%S)
 TMP=$(mktemp -d)
 COPYFILE_DISABLE=1 tar --no-mac-metadata --exclude ./node_modules --exclude ./data --exclude ./.env --exclude ./deploy --exclude ./.git \
-  --exclude ./video --exclude ./docs --exclude ./test -czf "$TMP/app.tgz" .
+  --exclude ./video --exclude ./docs --exclude ./test --exclude ./infra -czf "$TMP/app.tgz" .
 echo "  bundle: $(du -h "$TMP/app.tgz" | cut -f1)"
 aws s3 cp "$TMP/app.tgz" "s3://$BUCKET/releases/$VER.tgz" --only-show-errors
 

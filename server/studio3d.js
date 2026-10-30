@@ -133,6 +133,43 @@ function applyFix(code, tuning, fix) {
   return { code: c, tuning: t };
 }
 
+// QA loop shared by new games and revisions: lint, smoke-test the real code in the browser lab,
+// send exact problems back to the developer until it runs (gameplay warnings go to the lead).
+async function qaLoop({ code, models, tuning, browser, budget, emit, agent }) {
+  const fixHistory = [];
+  for (let attempt = 1; ; attempt++) {
+    // Static check first: syntax errors and undeclared variables, found instantly for free.
+    const lint = lintGame(code);
+    let r = null;
+    if (!lint.length) {
+      agent("bots", "working", `QA: linter clean — running build smoke tests (attempt ${attempt})…`);
+      r = await browser("test", { payload: { code, models, tuning }, runs: 2, maxTime: 90 });
+      if (!r) throw new Error("The browser test lab did not answer (keep the studio page open).");
+    }
+    const crashed = lint.length ? `The linter found ${lint.length} problem(s) — fix ALL of them:\n- ${lint.join("\n- ")}` : r.compileError ? `Module failed to load: ${r.compileError}` : r.sessions.find((s) => s.error) ? `Runtime error: ${JSON.stringify(r.sessions.find((s) => s.error).error)}` : null;
+    const stuck = crashed ? null : gameplayProblems(r.sessions, r.meta || {});
+    const warn = r?.sessions?.[0]?.warnings?.length ? ` (${r.sessions[0].warnings.join("; ")})` : "";
+    let problem = crashed || stuck;
+    // Point the developer at the exact failing lines.
+    const at = problem && problem.match(/blob:[^:]*:[^:]*:(\d+):(\d+)/);
+    if (at) {
+      const n = +at[1], lines = code.split("\n");
+      problem += `\nFailing line ${n}: ${lines[n - 1]?.trim()}\nContext:\n${lines.slice(Math.max(0, n - 4), n + 2).map((l, i) => `${Math.max(1, n - 3) + i}: ${l}`).join("\n")}`;
+    }
+    emit({ type: "qa", attempt, ok: !problem, problem, lint: lint.length, warnings: r?.sessions?.[0]?.warnings || [] });
+    if (!problem) { agent("bots", "done", `QA passed: the game loads, runs and progresses.${warn}`); break; }
+    if (attempt > 3 && !crashed) { agent("bots", "done", `QA: game runs; remaining issue goes to the studio lead: ${problem.slice(0, 140)}`); break; }
+    if (attempt > 4) throw new Error(`The developer could not fix the build: ${problem}`);
+    agent("developer", "working", `QA found a bug — fixing: ${problem.slice(0, 160)}`);
+    const before = code;
+    code = await chatCode({ role: "designer", messages: P.fixMessages(code, problem, fixHistory), maxTokens: 14000, temperature: 0.2 + attempt * 0.15, budget, purpose: `developer fix ${attempt}`, extra: NO_THINK });
+    fixHistory.push(`attempt ${attempt}: ${code === before ? "returned the code unchanged" : "changed the code but the same error happened again"}`);
+    emit({ type: "code", code, note: `fix ${attempt}: ${problem.slice(0, 120)}` });
+    agent("developer", "done", `Patched the code (${code.split("\n").length} lines).`);
+  }
+  return code;
+}
+
 export async function runStudio({ project, emit, budget, browser }) {
   const { idea, hasDrawing } = project;
   const agent = (a, state, text) => emit({ type: "agent", agent: a, state, text });
@@ -200,37 +237,7 @@ export async function runStudio({ project, emit, budget, browser }) {
   agent("developer", "done", `Wrote ${code.split("\n").length} lines of game code.`);
 
   // 5. QA: run the real code headless; send crashes back to the developer.
-  const fixHistory = [];
-  for (let attempt = 1; ; attempt++) {
-    // Static check first: syntax errors and undeclared variables, found instantly for free.
-    const lint = lintGame(code);
-    let r = null;
-    if (!lint.length) {
-      agent("bots", "working", `QA: linter clean — running build smoke tests (attempt ${attempt})…`);
-      r = await browser("test", { payload: { code, models, tuning }, runs: 2, maxTime: 90 });
-      if (!r) throw new Error("The browser test lab did not answer (keep the studio page open).");
-    }
-    const crashed = lint.length ? `The linter found ${lint.length} problem(s) — fix ALL of them:\n- ${lint.join("\n- ")}` : r.compileError ? `Module failed to load: ${r.compileError}` : r.sessions.find((s) => s.error) ? `Runtime error: ${JSON.stringify(r.sessions.find((s) => s.error).error)}` : null;
-    const stuck = crashed ? null : gameplayProblems(r.sessions, r.meta || {});
-    const warn = r?.sessions?.[0]?.warnings?.length ? ` (${r.sessions[0].warnings.join("; ")})` : "";
-    let problem = crashed || stuck;
-    // Point the developer at the exact failing lines.
-    const at = problem && problem.match(/blob:[^:]*:[^:]*:(\d+):(\d+)/);
-    if (at) {
-      const n = +at[1], lines = code.split("\n");
-      problem += `\nFailing line ${n}: ${lines[n - 1]?.trim()}\nContext:\n${lines.slice(Math.max(0, n - 4), n + 2).map((l, i) => `${Math.max(1, n - 3) + i}: ${l}`).join("\n")}`;
-    }
-    emit({ type: "qa", attempt, ok: !problem, problem, lint: lint.length, warnings: r?.sessions?.[0]?.warnings || [] });
-    if (!problem) { agent("bots", "done", `QA passed: the game loads, runs and progresses.${warn}`); break; }
-    if (attempt > 3 && !crashed) { agent("bots", "done", `QA: game runs; remaining issue goes to the studio lead: ${problem.slice(0, 140)}`); break; }
-    if (attempt > 4) throw new Error(`The developer could not fix the build: ${problem}`);
-    agent("developer", "working", `QA found a bug — fixing: ${problem.slice(0, 160)}`);
-    const before = code;
-    code = await chatCode({ role: "designer", messages: P.fixMessages(code, problem, fixHistory), maxTokens: 14000, temperature: 0.2 + attempt * 0.15, budget, purpose: `developer fix ${attempt}`, extra: NO_THINK });
-    fixHistory.push(`attempt ${attempt}: ${code === before ? "returned the code unchanged" : "changed the code but the same error happened again"}`);
-    emit({ type: "code", code, note: `fix ${attempt}: ${problem.slice(0, 120)}` });
-    agent("developer", "done", `Patched the code (${code.split("\n").length} lines).`);
-  }
+  code = await qaLoop({ code, models, tuning, browser, budget, emit, agent });
 
   // 6. Playtest → lead → keep only improvements.
   let best = null;
@@ -293,4 +300,53 @@ export async function runStudio({ project, emit, budget, browser }) {
 
   emit({ type: "final", build: best.build, total: best.total, payload: best.payload, design });
   return { design, ...best };
+}
+
+// A conversational revision of an existing game: plan (with memory) → change tuning/code/art
+// → QA loop → bots measure fun before and after. Returns the new payload, or just a reply.
+export async function runRevision({ current, design, changelog, history, request, source = "owner", emit, budget, browser }) {
+  const agent = (a, state, text) => emit({ type: "agent", agent: a, state, text });
+  agent("lead", "working", "Reading your request and the game's history…");
+  const plan = await chatJson({ role: "designer", messages: P.changePlanMessages({ design, tuning: current.tuning, models: current.models, changelog, history, request, source }), maxTokens: 3000, temperature: 0.4, budget, purpose: "revision plan", extra: NO_THINK });
+  emit({ type: "plan", plan });
+  agent("lead", "done", plan.reply || "Planned the change.");
+  if (plan.kind === "question") return { reply: plan.reply, changed: false };
+
+  // Baseline fun score of the current version, measured the same way as the new one.
+  agent("bots", "working", "Measuring the current version with 15 bot players…");
+  const baseRun = await browser("test", { payload: current, runs: 5, maxTime: 180 });
+  const before = funScore(botReport(baseRun?.sessions || []));
+
+  let { code, models = [], tuning = {} } = current;
+  models = JSON.parse(JSON.stringify(models));
+  tuning = { ...tuning };
+  for (const [k, v] of Object.entries(plan.tuning || {})) if (typeof v === "number" && Number.isFinite(v)) tuning[k] = v;
+
+  if (Array.isArray(plan.art) && plan.art.length) {
+    agent("artist", "working", `Updating ${plan.art.map((a) => a.name).join(", ")}…`);
+    try {
+      const art = await chatJson({ role: "designer", messages: P.modifyModelsMessages(design, models, plan.art.slice(0, 4), await P.loadExampleModels()), maxTokens: 9000, temperature: 0.4, budget, purpose: "revision art", extra: NO_THINK });
+      for (const m of art.models || []) if (m?.name && Array.isArray(m.parts) && m.parts.length) { const i = models.findIndex((x) => x.name === m.name); if (i >= 0) models[i] = m; else models.push(m); }
+      const shots = (await browser("render", { models: models.filter((m) => plan.art.some((a) => a.name === m.name)) }, 60e3))?.images || [];
+      emit({ type: "modelshots", images: shots, round: 1 });
+    } catch (e) { if (e instanceof BudgetError) throw e; }
+    agent("artist", "done", "3D models updated.");
+  }
+
+  if (plan.codePlan && plan.codePlan.trim()) {
+    agent("developer", "working", "Changing the game code…");
+    code = await chatCode({ role: "designer", messages: P.modifyCodeMessages(code, plan.codePlan, design), maxTokens: 14000, temperature: 0.3, budget, purpose: "revision code", extra: NO_THINK });
+    emit({ type: "code", code, note: `revision: ${plan.summary || request}`.slice(0, 160) });
+    agent("developer", "done", `Updated the code (${code.split("\n").length} lines).`);
+  }
+
+  code = await qaLoop({ code, models, tuning, browser, budget, emit, agent });
+  const payload = { ...current, code, models, tuning };
+  agent("bots", "working", "Measuring the new version with 15 bot players…");
+  const run = await browser("test", { payload, runs: 5, maxTime: 180 });
+  const rep = botReport(run?.sessions || []), after = funScore(rep);
+  emit({ type: "swarm", build: "new", report: rep, fun: after });
+  agent("bots", "done", `Fun score ${before.score} → ${after.score}. ${after.notes[0] || ""}`);
+  emit({ type: "build", build: "new", payload });
+  return { reply: plan.reply, summary: plan.summary || request, changed: true, payload, before: before.score, after: after.score, kind: plan.kind };
 }
