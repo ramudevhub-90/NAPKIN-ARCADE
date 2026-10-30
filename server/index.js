@@ -86,7 +86,7 @@ async function startRevision(id, user, meta, game, request, source, feedbackId =
   const history = await store.chat(id);
   return startJob(id, user.sub, (ctx) => runRevision({ current: game, design: game.design, changelog: meta.changelog || [], history, request, source, ...ctx }), async (out, p, err) => {
     const setFb = async (status) => { if (feedbackId) { await store.setFeedback(id, feedbackId, status); await syncPending(id); } };
-    if (!out) { await store.addChat(id, { role: "studio", text: `That change didn't work out: ${err?.message || "unknown error"}. The game is unchanged.` }); await setFb("approved"); return; }
+    if (!out) { await store.addChat(id, { role: "studio", text: `That change didn't work out: ${err?.message || "unknown error"}. The game is unchanged.` }); await setFb("pending"); return; } // back in the inbox so it can be approved again
     if (!out.changed) { await store.addChat(id, { role: "studio", text: out.reply }); return; }
     const next = { ...out.payload, design: game.design, score: out.after };
     const v = await store.saveVersion(id, next, out.summary, out.after); // a draft: players keep the live version

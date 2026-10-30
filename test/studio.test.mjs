@@ -42,3 +42,12 @@ test("leaderboard weeks follow ISO 8601 (Monday start, week 1 holds the first Th
 test("every showcase game starts racers apart in multiplayer", () => {
   for (const f of fs.readdirSync(EX).filter((f) => f.endsWith(".js"))) assert.match(fs.readFileSync(new URL(f, EX), "utf8"), /api\.mp\b/, f);
 });
+
+test("multiplayer is a hard gate: only a lab run that passed the 2-player race can ship", async () => {
+  const { multiplayerProblem } = await import("../server/studio3d.js");
+  const ok = { sessions: [{ outcome: "won" }], multiplayer: [] };
+  assert.equal(multiplayerProblem(ok), null);
+  assert.match(multiplayerProblem({ ...ok, multiplayer: ["Both racers start at the same spot"] }), /Multiplayer races: Both racers start/);
+  assert.match(multiplayerProblem({ sessions: [{ outcome: "won" }] }), /didn't run the 2-player race check/); // an outdated lab can't wave a game through
+  assert.equal(multiplayerProblem({ compileError: "boom" }), null); // crashes are reported separately
+});

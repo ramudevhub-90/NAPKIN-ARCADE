@@ -133,6 +133,18 @@ function applyFix(code, tuning, fix) {
   return { code: c, tuning: t };
 }
 
+// Multiplayer is a hard requirement: every version that ships must pass the lab's 2-player race
+// (player exists, racers start apart, identical course). Returns the problem, or null when it passes.
+export function multiplayerProblem(r) {
+  if (!r || r.compileError || r.sessions?.some((s) => s.error)) return null; // crashes are reported on their own
+  if (!Array.isArray(r.multiplayer)) return "The test lab didn't run the 2-player race check (reload the studio page so it loads the latest engine).";
+  return r.multiplayer.length ? `Multiplayer races: ${r.multiplayer.join(" ")}` : null;
+}
+function assertMultiplayer(r) {
+  const problem = multiplayerProblem(r);
+  if (problem) throw new Error(`Not shipped — every game must work in 2-player races. ${problem}`);
+}
+
 // QA loop shared by new games and revisions: lint, smoke-test the real code in the browser lab,
 // send exact problems back to the developer until it runs (gameplay warnings go to the lead).
 async function qaLoop({ code, models, tuning, browser, budget, emit, agent }) {
@@ -147,9 +159,11 @@ async function qaLoop({ code, models, tuning, browser, budget, emit, agent }) {
       if (!r) throw new Error("The browser test lab did not answer (keep the studio page open).");
     }
     const crashed = lint.length ? `The linter found ${lint.length} problem(s) — fix ALL of them:\n- ${lint.join("\n- ")}` : r.compileError ? `Module failed to load: ${r.compileError}` : r.sessions.find((s) => s.error) ? `Runtime error: ${JSON.stringify(r.sessions.find((s) => s.error).error)}` : null;
-    const stuck = crashed ? null : [gameplayProblems(r.sessions, r.meta || {}), r.multiplayer?.length ? `Multiplayer races: ${r.multiplayer.join(" ")}` : null].filter(Boolean).join(" ") || null;
+    // Multiplayer failures block shipping like crashes do; other gameplay issues can go to the lead.
+    const mp = crashed ? null : multiplayerProblem(r);
+    const stuck = crashed ? null : gameplayProblems(r.sessions, r.meta || {});
     const warn = r?.sessions?.[0]?.warnings?.length ? ` (${r.sessions[0].warnings.join("; ")})` : "";
-    let problem = crashed || stuck;
+    let problem = crashed || [mp, stuck].filter(Boolean).join(" ") || null;
     // Point the developer at the exact failing lines.
     const at = problem && problem.match(/blob:[^:]*:[^:]*:(\d+):(\d+)/);
     if (at) {
@@ -158,8 +172,8 @@ async function qaLoop({ code, models, tuning, browser, budget, emit, agent }) {
     }
     emit({ type: "qa", attempt, ok: !problem, problem, lint: lint.length, warnings: r?.sessions?.[0]?.warnings || [] });
     if (!problem) { agent("bots", "done", `QA passed: the game loads, runs and progresses.${warn}`); break; }
-    if (attempt > 3 && !crashed) { agent("bots", "done", `QA: game runs; remaining issue goes to the studio lead: ${problem.slice(0, 140)}`); break; }
-    if (attempt > 4) throw new Error(`The developer could not fix the build: ${problem}`);
+    if (attempt > 3 && !crashed && !mp) { agent("bots", "done", `QA: game runs; remaining issue goes to the studio lead: ${problem.slice(0, 140)}`); break; }
+    if (attempt > 5 || (attempt > 4 && !mp)) throw new Error(mp && !crashed ? `Not shipped — the developer couldn't make 2-player races work: ${mp}` : `The developer could not fix the build: ${problem}`);
     agent("developer", "working", `QA found a bug — fixing: ${problem.slice(0, 160)}`);
     const before = code;
     code = await chatCode({ role: "designer", messages: P.fixMessages(code, problem, fixHistory), maxTokens: 14000, temperature: 0.2 + attempt * 0.15, budget, purpose: `developer fix ${attempt}`, extra: NO_THINK });
@@ -246,6 +260,7 @@ export async function runStudio({ project, emit, budget, browser }) {
     emit({ type: "build", build, payload });
     agent("bots", "working", `Build ${build}: 15 bot players (novice, casual, expert) are playing…`);
     const r = await browser("test", { payload, runs: 5, maxTime: 180 });
+    assertMultiplayer(r);
     const rep = botReport(r?.sessions || []);
     const fun = funScore(rep);
     emit({ type: "swarm", build, report: rep, fun });
@@ -284,6 +299,8 @@ export async function runStudio({ project, emit, budget, browser }) {
         const tr = await browser("test", { payload: { code: cand.code, models, tuning: cand.tuning }, runs: 5, maxTime: 180 });
         const crashed = !tr || tr.compileError || tr.sessions.some((s) => s.error);
         if (crashed) { trials.push({ label: fix.label, why: fix.why, score: null, rejected: tr?.compileError || "crashed" }); continue; }
+        const mpBroken = multiplayerProblem(tr);
+        if (mpBroken) { trials.push({ label: fix.label, why: fix.why, score: null, rejected: `breaks multiplayer: ${mpBroken.slice(0, 120)}` }); continue; }
         const f = funScore(botReport(tr.sessions));
         trials.push({ label: fix.label, why: fix.why, score: f.score, raw: f.raw, notes: f.notes, cand, changes: { tuning: fix.tuning || {}, patches: (fix.patches || []).length } });
       }
@@ -344,6 +361,7 @@ export async function runRevision({ current, design, changelog, history, request
   const payload = { ...current, code, models, tuning };
   agent("bots", "working", "Measuring the new version with 15 bot players…");
   const run = await browser("test", { payload, runs: 5, maxTime: 180 });
+  assertMultiplayer(run);
   const rep = botReport(run?.sessions || []), after = funScore(rep);
   emit({ type: "swarm", build: "new", report: rep, fun: after });
   agent("bots", "done", `Fun score ${before.score} → ${after.score}. ${after.notes[0] || ""}`);
