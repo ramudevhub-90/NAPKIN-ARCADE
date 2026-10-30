@@ -28,7 +28,8 @@ export const MODELS = [
 export function setup(api) {
   const T = api.tuning, G = api.data;
   api.env({ preset: "space", layout: "strip", width: T.halfWidth * 2, track: "none" });
-  G.player = api.spawn("glider", { tag: "player", pos: [0, 4, 0] });
+  const sx = api.mp ? (api.mp.slot - (api.mp.players - 1) / 2) * 3 : 0; // racers start apart
+  G.player = api.spawn("glider", { tag: "player", pos: [sx, 4, 0] });
   G.boost = 0; G.cool = 0; G.next = -60; G.stage = 0; G.streak = 0; G.shield = 0;
   api.follow(G.player, { offset: [0, 2.6, 9], look: [0, 0.6, -14], smooth: 6 });
   api.message("LAUNCH!", "Fly through the rings", 2);

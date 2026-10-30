@@ -148,6 +148,7 @@ const TICKET_KEY = crypto.randomBytes(32);
 const sign = (s) => crypto.createHmac("sha256", TICKET_KEY).update(s).digest("hex");
 const playTicket = (id) => { const exp = Date.now() + 6 * 3600e3; return `${exp}.${sign(`${id}.${exp}`)}`; };
 const validTicket = (id, t) => { const [exp, sig] = String(t || "").split("."); return +exp > Date.now() && /^[a-f0-9]{64}$/.test(sig || "") && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(sign(`${id}.${exp}`))); };
+const COUNTRY = /^(?!ALL$)[A-Z]{2}$/;
 const EMAIL = /^[^\s@<>]{1,64}@[^\s@<>]{1,190}\.[a-z]{2,24}$/i;
 const scoreHits = new Map();
 
@@ -216,18 +217,21 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/scores") {
       const game = url.searchParams.get("game") || "";
       if (!(await knownGame(req, game))) return json(res, 404, { error: "Game not found" });
+      const period = ["week", "month", "all"].includes(url.searchParams.get("period")) ? url.searchParams.get("period") : "all";
+      const country = COUNTRY.test(url.searchParams.get("country") || "") ? url.searchParams.get("country") : "ALL";
       if (req.method === "POST") {
         const ip = clientIp(req), now = Date.now(), hits = (scoreHits.get(ip) || []).filter((t) => now - t < 60e3);
         if (hits.length >= 12) return json(res, 429, { error: "Too many scores — slow down." });
         scoreHits.set(ip, [...hits, now]);
         const b = await body(req, 1e4);
-        const entry = { name: String(b.name || "Player").replace(/[<>]/g, "").trim().slice(0, 18) || "Player", score: Math.max(0, Math.min(1e7, Math.round(+b.score || 0))), progress: Math.max(0, Math.min(1, +b.progress || 0)), won: b.won ? 1 : 0, time: Math.max(0, Math.min(3600, +b.time || 0)) };
-        await store.addScore(game, entry);
-        const top = await store.topScores(game, 100);
-        const rank = top.findIndex((t) => t.name === entry.name && t.score === entry.score) + 1 || null;
-        return json(res, 200, { rank, top: top.slice(0, 10) });
+        const entry = { name: String(b.name || "Player").replace(/[<>]/g, "").trim().slice(0, 18) || "Player", score: Math.max(0, Math.min(1e7, Math.round(+b.score || 0))), progress: Math.max(0, Math.min(1, +b.progress || 0)), won: b.won ? 1 : 0, time: Math.max(0, Math.min(3600, +b.time || 0)), ...(COUNTRY.test(b.country || "") ? { country: b.country } : {}) };
+        const ts = await store.addScore(game, entry);
+        // Where this score landed on each board (top 100), for the "you're #3 this week" message.
+        const rankIn = async (opts) => (await store.topScores(game, 100, opts)).findIndex((t) => t.ts === ts) + 1 || null;
+        const [week, month, all, local] = await Promise.all([rankIn({ period: "week" }), rankIn({ period: "month" }), rankIn({ period: "all" }), entry.country ? rankIn({ period: "week", country: entry.country }) : null]);
+        return json(res, 200, { ts, ranks: { week, month, all, countryWeek: local }, top: await store.topScores(game, 10, { period, country }) });
       }
-      return json(res, 200, { top: await store.topScores(game, 10) });
+      return json(res, 200, { period, country, top: await store.topScores(game, 10, { period, country }) });
     }
     if (url.pathname === "/api/rooms" && req.method === "POST") {
       const b = await body(req, 1e4);

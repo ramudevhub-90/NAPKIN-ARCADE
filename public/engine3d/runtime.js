@@ -25,7 +25,7 @@ const FinishShader = {
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const v3 = (a, d = [0, 0, 0]) => (a?.isVector3 ? a.clone() : new THREE.Vector3(...(Array.isArray(a) ? a.map((x, i) => +x || d[i] || 0) : d)));
 
-export function createRuntime({ canvas = null, game, models = [], tuning = {}, seed = 1, ui = null, sfx = null, quality = 1 }) {
+export function createRuntime({ canvas = null, game, models = [], tuning = {}, seed = 1, ui = null, sfx = null, quality = 1, mp = null }) {
   const headless = !canvas;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 3000);
@@ -93,6 +93,8 @@ export function createRuntime({ canvas = null, game, models = [], tuning = {}, s
   const tmp = new THREE.Vector3();
   const api = {
     THREE, scene, camera, tuning: T, T, headless, data: {},
+    // In a multiplayer race: this racer's start slot (0..players-1) and the number of racers; null when solo.
+    mp: mp ? Object.freeze({ slot: Math.max(0, mp.slot | 0), players: Math.max(1, mp.players | 0) }) : null,
     get time() { return st.time; }, get score() { return st.score; }, get lives() { return st.lives; }, set lives(v) { st.lives = v; ui?.lives(v); },
     get status() { return st.status; }, get progressValue() { return st.progress; },
     input,
@@ -266,10 +268,11 @@ export function createRuntime({ canvas = null, game, models = [], tuning = {}, s
       if (!g) {
         const model = api.player?.name || "hero";
         const obj = cloneModel(proto(model));
-        obj.traverse((n) => { if (n.isMesh) { n.material = n.material.clone(); n.material.transparent = true; n.material.opacity = 0.55; if (n.material.emissive) { n.material.emissive.set(r.color); n.material.emissiveIntensity = 0.35; } n.castShadow = false; } });
+        const mats = [];
+        obj.traverse((n) => { if (n.isMesh) { n.material = n.material.clone(); n.material.transparent = true; n.material.opacity = 0.7; n.material.depthWrite = false; if (n.material.color) n.material.color.lerp(new THREE.Color(r.color), 0.45); if (n.material.emissive) { n.material.emissive.set(r.color); n.material.emissiveIntensity = 0.6; } n.castShadow = false; mats.push(n.material); } });
         const tag = nameTag(r.name, r.color); tag.position.y = (obj.userData.height || 1.5) + 1.2; obj.add(tag);
         scene.add(obj);
-        g = { obj, target: new THREE.Vector3(r.x, r.y, r.z), ry: r.ry || 0 };
+        g = { obj, mats, target: new THREE.Vector3(r.x, r.y, r.z), ry: r.ry || 0 };
         obj.position.copy(g.target);
         rivals.set(r.id, g);
       }
@@ -282,6 +285,10 @@ export function createRuntime({ canvas = null, game, models = [], tuning = {}, s
       g.obj.position.lerp(g.target, 1 - Math.exp(-10 * dt));
       g.obj.rotation.y += (g.ry - g.obj.rotation.y) * (1 - Math.exp(-10 * dt));
       animateModel(g.obj, st.time, 20);
+      // A rival on top of you turns almost see-through, so your own car always reads clearly.
+      const me = api.player, near = me ? Math.hypot(g.obj.position.x - me.pos.x, g.obj.position.z - me.pos.z) : 99;
+      const op = near < 2.5 ? 0.15 : near < 5 ? 0.15 + (near - 2.5) * 0.22 : 0.7;
+      for (const m of g.mats) m.opacity += (op - m.opacity) * Math.min(1, 12 * dt);
     }
   }
 

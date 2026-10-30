@@ -29,3 +29,16 @@ test("auto-tuner eases danger and keeps rewards", () => {
   assert.ok(out.rowGap > 30 && out.carChance < 0.4 && out.enemySpeed < 10 && out.coinChance >= 0.5);
   assert.equal(out.length, undefined);
 });
+
+test("leaderboard weeks follow ISO 8601 (Monday start, week 1 holds the first Thursday)", async () => {
+  const { isoWeek, boardKey } = await import("../aws/lib/store.mjs");
+  assert.equal(isoWeek(new Date("2026-10-30T12:00:00Z")), "2026-44");
+  assert.equal(isoWeek(new Date("2024-12-30T12:00:00Z")), "2025-01");
+  assert.equal(isoWeek(new Date("2027-01-01T12:00:00Z")), "2026-53");
+  assert.equal(boardKey("month", new Date("2026-10-30T12:00:00Z")), "M2026-10");
+  assert.equal(boardKey("all"), "ALL");
+});
+
+test("every showcase game starts racers apart in multiplayer", () => {
+  for (const f of fs.readdirSync(EX).filter((f) => f.endsWith(".js"))) assert.match(fs.readFileSync(new URL(f, EX), "utf8"), /api\.mp\b/, f);
+});

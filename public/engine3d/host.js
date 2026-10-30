@@ -2,7 +2,7 @@
 // talks to the studio with postMessage: load / view / test (bots) / trial / agent play.
 // Opened directly (?id=… or ?example=…) it is the public play page.
 import { createRuntime, DT } from "./runtime.js";
-import { runBots, genericBot, SKILLS } from "./bots.js";
+import { runBots, genericBot, SKILLS, multiplayerCheck } from "./bots.js";
 import { Sfx } from "./fx.js";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -183,7 +183,7 @@ function start(m, seed) {
   rt?.dispose();
   stageEl.innerHTML = "";
   const canvas = document.createElement("canvas"); stageEl.appendChild(canvas);
-  rt = createRuntime({ canvas, game: mod, models: payload.models, tuning: payload.tuning, seed: seed ?? (m === "play" ? (Math.random() * 1e9) | 0 : 7), ui, sfx });
+  rt = createRuntime({ canvas, game: mod, models: payload.models, tuning: payload.tuning, seed: seed ?? (m === "play" ? (Math.random() * 1e9) | 0 : 7), ui, sfx, mp: m === "play" && mp ? { slot: mp.slot, players: mp.players } : null });
   $("hud").hidden = quiet; ui.score(0); ui.lives(rt.state.lives); ui.progress(0);
   if (quiet) sfx.muted = true;
   $("tag").textContent = m === "view" && !quiet ? "🤖 Bot is playing — preview" : "";
@@ -245,7 +245,8 @@ addEventListener("message", async (ev) => {
         let gm;
         try { gm = await compile(m.payload); } catch (e) { return reply({ type: "result", compileError: String(e.message || e) }); }
         const sessions = await runBots(gm, m.payload, { runs: m.runs || 6, maxTime: m.maxTime || 150 });
-        return reply({ type: "result", meta: { controls: "move", action: "none", ...(gm.META || {}) }, sessions });
+        const multiplayer = sessions.some((s) => s.error) ? [] : multiplayerCheck(gm, m.payload);
+        return reply({ type: "result", meta: { controls: "move", action: "none", ...(gm.META || {}) }, sessions, multiplayer });
       }
       case "agent-start": {
         if (!mod) return reply({ type: "agent", error: "not loaded" });
@@ -264,7 +265,8 @@ addEventListener("message", async (ev) => {
       case "mp-lobby": mp = null; $("intro").classList.add("hidden"); return start("view");
       case "mp-start": {
         clearInterval(mp?.sendTimer);
-        mp = { seed: m.seed, ended: false };
+        window.focus(); // the race is started from the outer page, so take the keyboard back
+        mp = { seed: m.seed, ended: false, slot: m.slot | 0, players: m.players | 0 };
         start("play", m.seed);
         paused = true;
         $("intro").classList.add("hidden"); $("end").classList.add("hidden");
@@ -278,6 +280,8 @@ addEventListener("message", async (ev) => {
         return;
       }
       case "mp-rivals": return rt?.setRivals(m.rivals || []);
+      // Keys pressed while the outer page has focus (e.g. right after clicking Start race).
+      case "key": if (KEYMAP[m.code]) m.down ? keys.add(KEYMAP[m.code]) : keys.delete(KEYMAP[m.code]); if (m.down && (m.code === "KeyP" || m.code === "Escape")) togglePause(); return;
       case "best": best = Math.max(best, +m.score || 0); $("iBest").textContent = best ? `Your best: ${best}` : ""; return;
     }
   } catch (e) { reply({ type: "error", error: String(e?.message || e) }); }

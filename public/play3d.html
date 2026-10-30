@@ -17,12 +17,23 @@
     .btn { font: 15px "Russo One", sans-serif; color: #fff; border: 0; border-radius: 12px; padding: 11px 16px; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--orange)); box-shadow: 0 8px 24px rgba(255,47,160,.35); }
     .btn.ghost { background: rgba(255,255,255,.08); box-shadow: none; border: 1px solid var(--line); font: 600 14px Inter, sans-serif; }
     #friends { position: fixed; left: 16px; bottom: 16px; z-index: 5; }
-    #fs { position: fixed; left: 16px; bottom: 68px; z-index: 5; padding: 9px 13px; }
-    #fbBtn { position: fixed; left: 64px; bottom: 68px; z-index: 5; padding: 9px 13px; }
-    #lb { position: fixed; right: 16px; top: 70px; z-index: 6; width: 260px; padding: 12px 14px; max-height: calc(100vh - 120px); overflow: auto; }
-    #lb h3 { margin: 0 0 8px; font: 13px "Russo One", sans-serif; letter-spacing: .08em; color: var(--muted); }
-    #lb .r { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; font-weight: 600; font-size: 13.5px; padding: 4px 0; }
-    #lb .r span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #lb .r.me { color: #ffd23f; }
+    #tools { position: fixed; left: 16px; bottom: 68px; z-index: 5; display: flex; gap: 8px; }
+    #tools .btn { padding: 9px 13px; }
+    #lb { position: fixed; right: 16px; top: 70px; z-index: 6; width: 300px; padding: 12px 14px; max-height: calc(100vh - 120px); overflow: auto; }
+    #lb .lbhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    #lb h3 { margin: 0; font: 13px "Russo One", sans-serif; letter-spacing: .08em; color: var(--muted); }
+    #lbClose { background: none; border: 0; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+    .tabs3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: rgba(255,255,255,.06); border-radius: 10px; padding: 3px; margin-bottom: 8px; }
+    .tabs3 button { border: 0; background: none; color: var(--muted); font: 600 12.5px Inter, sans-serif; padding: 6px 4px; border-radius: 8px; cursor: pointer; }
+    .tabs3 button.on { background: linear-gradient(135deg, var(--pink), var(--orange)); color: #fff; }
+    select { width: 100%; font: 600 13px Inter, sans-serif; color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; outline: none; }
+    select option { background: #15131f; color: var(--ink); }
+    #lbCountry { margin-bottom: 8px; }
+    #lb .r { display: grid; grid-template-columns: 22px 20px minmax(0, 1fr) auto; gap: 6px; font-weight: 600; font-size: 13.5px; padding: 4px 0; align-items: center; }
+    #lb .r .f { font-size: 15px; line-height: 1; }
+    #lb .r.top1 b { color: #ffd23f; } #lb .r.top2 b { color: #d9dde6; } #lb .r.top3 b { color: #e9a36a; }
+    #lbName select { margin-bottom: 8px; }
+    #lb .r span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #lb .r.me { color: #ffd23f; }
     #lb input { margin: 10px 0 8px; padding: 9px; }
     #home { position: fixed; right: 14px; bottom: 12px; display: inline-flex; align-items: center; gap: 6px; font: 600 12px Inter, sans-serif; color: rgba(255,255,255,.7); text-decoration: none; z-index: 5; }
     .overlay { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: rgba(7,6,13,.55); }
@@ -54,8 +65,7 @@
 <body>
   <iframe id="g" sandbox="allow-scripts" allow="autoplay; fullscreen" title="Game"></iframe>
   <button id="friends" class="btn">👥 Play with friends</button>
-  <button id="fs" class="btn ghost" title="Fullscreen">⤢</button>
-  <button id="fbBtn" class="btn ghost hidden" title="Send feedback to the game's creator">💬 Feedback</button>
+  <div id="tools"><button id="fs" class="btn ghost" title="Fullscreen">⤢</button><button id="lbBtn" class="btn ghost" title="Leaderboard">🏆 Leaderboard</button><button id="fbBtn" class="btn ghost hidden" title="Send feedback to the game's creator">💬 Feedback</button></div>
   <div id="lock" class="overlay hidden" style="z-index:30"><div class="glass panel" style="text-align:center">
     <h2 id="lockTitle">🔒 Private game</h2><p class="muted" id="lockText"></p>
     <div class="row" style="justify-content:center;margin-top:14px"><a class="btn" id="lockSignIn" style="text-decoration:none">Sign in to play</a><a class="btn ghost" href="/arcade" style="text-decoration:none">Browse public games</a></div>
@@ -68,7 +78,14 @@
     <div class="row"><button class="btn" id="fbSend">Send feedback</button><button type="button" class="btn ghost" id="fbCancel">Cancel</button></div>
     <p class="muted" id="fbMsg" style="margin:8px 0 0"></p>
   </form></div>
-  <div id="lb" class="glass hidden"><h3>🏆 LEADERBOARD</h3><div id="lbRows"></div><form id="lbName" class="hidden"><input id="lbInput" maxlength="18" placeholder="Your name for the board"><button class="btn" style="width:100%">Save my score</button></form><p class="muted" id="lbMsg" style="margin:6px 0 0;font-size:13px"></p></div>
+  <div id="lb" class="glass hidden">
+    <div class="lbhead"><h3>🏆 LEADERBOARD</h3><button id="lbClose" title="Close">✕</button></div>
+    <div class="tabs3" id="lbPeriod"><button data-period="week">This week</button><button data-period="month">This month</button><button data-period="all">All time</button></div>
+    <select id="lbCountry" aria-label="Country"></select>
+    <div id="lbRows"></div>
+    <form id="lbName" class="hidden"><input id="lbInput" maxlength="18" placeholder="Your name for the board"><select id="lbMyCountry" aria-label="Your country"></select><button class="btn" style="width:100%">Save my score</button></form>
+    <p class="muted" id="lbMsg" style="margin:6px 0 0;font-size:13px"></p>
+  </div>
   <a id="home" href="/"><img class="mark" src="/logo.svg" alt="" width="18" height="18">Made with Napkin Arcade</a>
 
   <div id="nameBox" class="overlay hidden"><form class="glass panel" id="nameForm">
@@ -120,6 +137,15 @@
       $("lock").classList.remove("hidden");
     });
     g.addEventListener("load", () => g.focus());
+    // If the outer page has the keyboard (after clicking one of its buttons), pass game keys through.
+    const GAME_KEYS = /^(Arrow(Left|Right|Up|Down)|Key[WASDJPR]|Space|Enter|Escape)$/;
+    for (const type of ["keydown", "keyup"]) addEventListener(type, (e) => {
+      if (!GAME_KEYS.test(e.code) || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+      if (["lobby", "nameBox", "fbBox", "results", "lock"].some((o) => !$(o).classList.contains("hidden"))) return;
+      if (document.activeElement?.tagName === "BUTTON") document.activeElement.blur(); // Space shouldn't re-press Start
+      e.preventDefault();
+      toGame({ cmd: "key", code: e.code, down: type === "keydown" });
+    });
     const toGame = (msg) => g.contentWindow?.postMessage(msg, "*");
     const toast = (t) => { $("toast").textContent = t; $("toast").classList.remove("hidden"); clearTimeout(toast.t); toast.t = setTimeout(() => $("toast").classList.add("hidden"), 2200); };
     let user = null;
@@ -141,30 +167,66 @@
     const getBest = () => { try { return +localStorage.getItem(bestKey) || 0; } catch { return 0; } };
     const playerName = () => user?.name || (() => { try { return localStorage.getItem("na_name"); } catch { return null; } })();
     g.addEventListener("load", () => setTimeout(() => toGame({ cmd: "best", score: getBest() }), 600));
-    function renderBoard(top, meAt) {
-      $("lbRows").innerHTML = top.length ? top.map((r, i) => `<div class="r${i + 1 === meAt ? " me" : ""}"><b>${i + 1}</b><span>${esc(r.name)}</span><span>${r.score}</span></div>`).join("") : '<p class="muted" style="margin:0">No scores yet — be the first!</p>';
+    // ---- Leaderboards: this week / this month / all time, worldwide or one country ----
+    const COUNTRIES = "AD AE AF AG AI AL AM AO AR AS AT AU AW AZ BA BB BD BE BF BG BH BI BJ BM BN BO BR BS BT BW BY BZ CA CD CF CG CH CI CK CL CM CN CO CR CU CV CY CZ DE DJ DK DM DO DZ EC EE EG ER ES ET FI FJ FM FO FR GA GB GD GE GH GI GL GM GN GQ GR GT GU GW GY HK HN HR HT HU ID IE IL IN IQ IR IS IT JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MG MH MK ML MM MN MO MR MT MU MV MW MX MY MZ NA NC NE NG NI NL NO NP NR NZ OM PA PE PF PG PH PK PL PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SI SK SL SM SN SO SR SS ST SV SY SZ TD TG TH TJ TL TM TN TO TR TT TV TW TZ UA UG US UY UZ VA VC VE VN VU WS XK YE ZA ZM ZW".split(" ");
+    const regionName = (() => { try { const d = new Intl.DisplayNames(["en"], { type: "region" }); return (c) => d.of(c) || c; } catch { return (c) => c; } })();
+    const flag = (c) => (c && /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].map((x) => 0x1f1a5 + x.charCodeAt(0))) : "🌍");
+    const NAMES = COUNTRIES.map((c) => [c, regionName(c)]).sort((x, y) => x[1].localeCompare(y[1]));
+    // The player's country: remembered, else a guess from the device's language region or time zone.
+    const TZ = { "Asia/Kolkata": "IN", "Asia/Calcutta": "IN", "Asia/Dubai": "AE", "Asia/Singapore": "SG", "Asia/Tokyo": "JP", "Asia/Seoul": "KR", "Asia/Shanghai": "CN", "Asia/Hong_Kong": "HK", "Asia/Karachi": "PK", "Asia/Dhaka": "BD", "Asia/Kathmandu": "NP", "Asia/Colombo": "LK", "Asia/Jakarta": "ID", "Asia/Manila": "PH", "Asia/Bangkok": "TH", "Europe/London": "GB", "Europe/Paris": "FR", "Europe/Berlin": "DE", "Europe/Madrid": "ES", "Europe/Rome": "IT", "Europe/Amsterdam": "NL", "America/Toronto": "CA", "America/Vancouver": "CA", "America/Sao_Paulo": "BR", "America/Mexico_City": "MX", "Australia/Sydney": "AU", "Australia/Melbourne": "AU", "Africa/Lagos": "NG", "Africa/Nairobi": "KE", "Africa/Johannesburg": "ZA" };
+    const guessCountry = () => {
+      for (const l of navigator.languages || []) { const r = /-([A-Z]{2})$/i.exec(l)?.[1]?.toUpperCase(); if (r && COUNTRIES.includes(r) && r !== "US") return r; }
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      return TZ[tz] || (tz.startsWith("America/") && !tz.includes("Argentina") ? "US" : null);
+    };
+    // "-" means the player chose not to say; don't ask again.
+    const savedCountry = () => { try { return localStorage.getItem("na_country"); } catch { return null; } };
+    const getCountry = () => { const v = savedCountry(); return v === "-" ? null : v || guessCountry(); };
+    const setCountry = (c) => { try { localStorage.setItem("na_country", c); } catch {} };
+    let board = { period: "week", country: "ALL" }, lastTs = null;
+    function fillCountries() {
+      const mine = getCountry();
+      const opts = (all) => (all ? '<option value="ALL">🌍 Worldwide</option>' : "") + (mine ? `<option value="${mine}">${flag(mine)} ${esc(regionName(mine))}</option><option disabled>──────────</option>` : "") + NAMES.filter(([c]) => c !== mine).map(([c, n]) => `<option value="${c}">${flag(c)} ${esc(n)}</option>`).join("");
+      $("lbCountry").innerHTML = opts(true); $("lbCountry").value = board.country;
+      $("lbMyCountry").innerHTML = (mine ? "" : '<option value="">🌍 Your country (optional)</option>') + opts(false); $("lbMyCountry").value = mine || "";
     }
+    function renderBoard(top) {
+      document.querySelectorAll("#lbPeriod button").forEach((b) => b.classList.toggle("on", b.dataset.period === board.period));
+      const where = board.country === "ALL" ? "" : ` in ${regionName(board.country)}`, when = { week: "this week", month: "this month", all: "yet" }[board.period];
+      $("lbRows").innerHTML = top.length ? top.map((r, i) => `<div class="r top${i + 1}${r.ts === lastTs ? " me" : ""}"><b>${i + 1}</b><span class="f" title="${esc(r.country ? regionName(r.country) : "")}">${r.country ? flag(r.country) : ""}</span><span>${esc(r.name)}</span><span>${r.score}</span></div>`).join("")
+        : `<p class="muted" style="margin:4px 0">No scores${where} ${when} — be the first!</p>`;
+    }
+    async function loadBoard() {
+      const j = await (await fetch(`/api/scores?game=${encodeURIComponent(id)}&period=${board.period}&country=${board.country}`)).json().catch(() => ({}));
+      renderBoard(j.top || []);
+    }
+    function openBoard() { fillCountries(); $("lb").classList.remove("hidden"); return loadBoard(); }
+    $("lbBtn").onclick = () => ($("lb").classList.contains("hidden") ? openBoard() : $("lb").classList.add("hidden"));
+    $("lbClose").onclick = () => $("lb").classList.add("hidden");
+    $("lbPeriod").onclick = (e) => { const b = e.target.closest("[data-period]"); if (b) { board.period = b.dataset.period; loadBoard(); } };
+    $("lbCountry").onchange = () => { board.country = $("lbCountry").value; loadBoard(); };
     let pending = null;
     async function submit(result, name) {
-      const r = await fetch("/api/scores?game=" + encodeURIComponent(id), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...result, name }) });
+      const country = getCountry();
+      const r = await fetch(`/api/scores?game=${encodeURIComponent(id)}&period=${board.period}&country=${board.country}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...result, name, country }) });
       const j = await r.json();
       if (!r.ok) return ($("lbMsg").textContent = j.error || "");
-      renderBoard(j.top, j.rank);
-      $("lbMsg").textContent = j.rank && j.rank <= 10 ? `You're #${j.rank} in the world! 🎉` : j.rank ? `Your rank: #${j.rank}` : "";
+      lastTs = j.ts; renderBoard(j.top);
+      const k = j.ranks || {};
+      $("lbMsg").textContent = k.all && k.all <= 10 ? `You're #${k.all} in the world, all time! 🎉` : k.week && k.week <= 10 ? `You're #${k.week} in the world this week! 🎉` : k.countryWeek && k.countryWeek <= 10 ? `You're #${k.countryWeek} in ${flag(country)} ${regionName(country)} this week! 🎉` : k.week ? `This week: #${k.week} worldwide${k.countryWeek ? ` · #${k.countryWeek} in ${regionName(country)}` : ""}` : "";
     }
     async function onGameEnd(result) {
       if (result.score > getBest()) { try { localStorage.setItem(bestKey, result.score); } catch {} }
       toGame({ cmd: "best", score: getBest() });
       if (ws) return; // multiplayer shows its own podium
-      $("lb").classList.remove("hidden"); $("lbMsg").textContent = "";
-      const { top = [] } = await (await fetch("/api/scores?game=" + encodeURIComponent(id))).json();
-      renderBoard(top);
+      $("lbMsg").textContent = ""; lastTs = null;
+      await openBoard();
       if (result.score <= 0) return;
       const name = playerName();
-      if (name) return submit(result, name);
-      pending = result; $("lbName").classList.remove("hidden"); $("lbInput").focus();
+      if (name && (getCountry() || savedCountry())) return submit(result, name);
+      pending = result; $("lbInput").value = name || ""; $("lbName").classList.remove("hidden"); $("lbInput").focus();
     }
-    $("lbName").onsubmit = (e) => { e.preventDefault(); const n = $("lbInput").value.trim(); if (!n || !pending) return; try { localStorage.setItem("na_name", n); } catch {} $("lbName").classList.add("hidden"); submit(pending, n); pending = null; };
+    $("lbName").onsubmit = (e) => { e.preventDefault(); const n = $("lbInput").value.trim(); if (!n || !pending) return; try { localStorage.setItem("na_name", n); } catch {} setCountry($("lbMyCountry").value || "-"); fillCountries(); $("lbName").classList.add("hidden"); submit(pending, n); pending = null; };
     // Player feedback goes to the game's creator (AI-made games only).
     if (!id.startsWith("example-")) $("fbBtn").classList.remove("hidden");
     $("fbBtn").onclick = () => { $("fbBox").classList.remove("hidden"); $("fbMsg").textContent = ""; $("fbText").focus(); try { $("fbName").value = localStorage.getItem("na_name") || ""; } catch {} };
@@ -247,7 +309,9 @@
       if (m.t === "spectate") toast("A race is running — you'll join the next one.");
       if (m.t === "start") {
         $("lobby").classList.add("hidden"); $("results").classList.add("hidden"); $("board").classList.remove("hidden");
-        toGame({ cmd: "mp-start", seed: m.seed });
+        const slot = Math.max(0, roster?.players.findIndex((p) => p.id === me) ?? 0);
+        toGame({ cmd: "mp-start", seed: m.seed, slot, players: roster?.players.length || 1 });
+        document.activeElement?.blur(); g.focus();
       }
       if (m.t === "states") {
         lastStates = m.states;

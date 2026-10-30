@@ -52,7 +52,8 @@ export const MODELS = [
 export function setup(api) {
   const T = api.tuning, G = api.data;
   api.env({ preset: "underwater", layout: "strip", width: T.halfWidth * 2, track: "none" });
-  G.player = api.spawn("clownfish", { tag: "player", pos: [0, 3, 0] });
+  const sx = api.mp ? (api.mp.slot - (api.mp.players - 1) / 2) * 3 : 0; // racers start apart
+  G.player = api.spawn("clownfish", { tag: "player", pos: [sx, 3, 0] });
   G.next = -40; G.stage = 0; G.dash = 0; G.cool = 0; G.combo = 0; G.comboT = 0; G.sharkT = T.sharkEvery;
   api.follow(G.player, { offset: [0, 2.8, 8.5], look: [0, 0.4, -12], smooth: 5 });
   api.message("SWIM HOME!", "Collect pearls in a row for combos", 2);

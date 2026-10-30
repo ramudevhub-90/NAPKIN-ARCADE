@@ -48,7 +48,8 @@ export const MODELS = [
 export function setup(api) {
   const T = api.tuning, G = api.data;
   api.env({ preset: "snow", layout: "strip", width: T.halfWidth * 2, track: "none" });
-  G.player = api.spawn("skier", { tag: "player", pos: [0, 0, 0] });
+  const sx = api.mp ? (api.mp.slot - (api.mp.players - 1) / 2) * 3 : 0; // racers start apart
+  G.player = api.spawn("skier", { tag: "player", pos: [sx, 0, 0] });
   G.vx = 0; G.vy = 0; G.speed = T.startSpeed; G.next = -40; G.row = 0; G.stage = 0; G.combo = 0; G.comboT = 0; G.gates = [];
   api.follow(G.player, { offset: [0, 4.2, 8], look: [0, 0.8, -12] });
   api.message("DROP IN!", "Pass between the gate flags", 2);

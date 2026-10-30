@@ -36,7 +36,8 @@ export const MODELS = [
 export function setup(api) {
   const T = api.tuning, G = api.data;
   api.env({ preset: "volcano", layout: "arena", size: T.arenaSize, track: "rock" });
-  G.player = api.spawn("ember bot", { tag: "player", pos: [0, 0, 0] });
+  const sx = api.mp ? (api.mp.slot - (api.mp.players - 1) / 2) * 3 : 0; // racers start apart
+  G.player = api.spawn("ember bot", { tag: "player", pos: [sx, 0, 0] });
   G.wave = 1; G.time = 0; G.nextMeteor = 2; G.nextCrystal = 0.5; G.falling = []; G.dash = 0; G.cool = 0; G.safe = 0; G.face = 0;
   api.follow(G.player, { offset: [0, 17, 13], look: [0, 0, -2], smooth: 4 });
   api.message("WAVE 1", "Watch for the red rings!", 2);

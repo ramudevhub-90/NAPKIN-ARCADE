@@ -135,3 +135,25 @@ export async function runBots(gameModule, payload, { runs = 6, skills = ["novice
   }
   return results;
 }
+
+// Multiplayer readiness, checked on every game before it ships: two racers in the same seeded
+// world must both have a player, start in different spots and get the same course.
+export function multiplayerCheck(gameModule, payload, seed = 4242) {
+  const race = (slot) => {
+    const rt = createRuntime({ game: gameModule, models: payload.models, tuning: payload.tuning, seed, mp: { slot, players: 2 } });
+    const start = rt.playerPose();
+    for (let i = 0; i < Math.round(3 / DT) && rt.state.status === "playing"; i++) { rt.setInput({}); rt.step(DT); }
+    const s = rt.snapshot();
+    return { start, error: s.error, spawned: ["hazard", "pickup", "goal"].map((t) => `${t} ${s.spawned[t] || 0}`).join(", ") };
+  };
+  let a, b;
+  try { a = race(0); b = race(1); } catch (e) { return [`The game crashes in a 2-player race: ${e.message || e}`]; }
+  const out = [];
+  if (a.error || b.error) out.push(`The game crashes in a 2-player race (api.mp = { slot: ${a.error ? 0 : 1}, players: 2 }): ${(a.error || b.error).message}`);
+  else if (!a.start || !b.start) out.push('Rivals are drawn from the entity tagged "player", but none exists right after setup(). Spawn the player in setup().');
+  else {
+    if (Math.hypot(a.start.x - b.start.x, a.start.z - b.start.z) < 1) out.push(`Both racers start at the same spot (x ${a.start.x}, z ${a.start.z}), so they sit on top of each other. In setup(), start each racer apart using api.mp.slot — e.g. lane = api.mp ? api.mp.slot % lanes : middle lane, or x = api.mp ? (api.mp.slot - (api.mp.players - 1) / 2) * 3 : 0.`);
+    if (a.spawned !== b.spawned) out.push(`The two racers get different worlds (slot 0: ${a.spawned}; slot 1: ${b.spawned}). Build the course only with api.rand/api.int/api.pick, and never let api.mp change what spawns — only where the player starts.`);
+  }
+  return out;
+}

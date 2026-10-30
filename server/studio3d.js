@@ -147,7 +147,7 @@ async function qaLoop({ code, models, tuning, browser, budget, emit, agent }) {
       if (!r) throw new Error("The browser test lab did not answer (keep the studio page open).");
     }
     const crashed = lint.length ? `The linter found ${lint.length} problem(s) — fix ALL of them:\n- ${lint.join("\n- ")}` : r.compileError ? `Module failed to load: ${r.compileError}` : r.sessions.find((s) => s.error) ? `Runtime error: ${JSON.stringify(r.sessions.find((s) => s.error).error)}` : null;
-    const stuck = crashed ? null : gameplayProblems(r.sessions, r.meta || {});
+    const stuck = crashed ? null : [gameplayProblems(r.sessions, r.meta || {}), r.multiplayer?.length ? `Multiplayer races: ${r.multiplayer.join(" ")}` : null].filter(Boolean).join(" ") || null;
     const warn = r?.sessions?.[0]?.warnings?.length ? ` (${r.sessions[0].warnings.join("; ")})` : "";
     let problem = crashed || stuck;
     // Point the developer at the exact failing lines.

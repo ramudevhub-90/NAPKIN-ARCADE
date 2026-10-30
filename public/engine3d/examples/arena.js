@@ -35,7 +35,8 @@ export const MODELS = [
 export function setup(api) {
   const T = api.tuning, G = api.data;
   api.env({ preset: "candy", layout: "arena", size: T.arenaSize, track: "candy" });
-  G.player = api.spawn("pup", { tag: "player", pos: [0, 0, 6] });
+  const sx = api.mp ? (api.mp.slot - (api.mp.players - 1) / 2) * 3 : 0; // racers start apart
+  G.player = api.spawn("pup", { tag: "player", pos: [sx, 0, 6] });
   G.wave = 0; G.dash = 0; G.cool = 0; G.collected = 0; G.total = T.waves * T.starsPerWave; G.face = 0; G.rush = 0; G.combo = 0; G.comboT = 0;
   api.follow(G.player, { offset: [0, 15, 12], look: [0, 0, -3], smooth: 4 });
   nextWave(api);

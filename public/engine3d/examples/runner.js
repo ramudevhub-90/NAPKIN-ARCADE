@@ -37,8 +37,9 @@ const CAR_COLORS = ["#e8202a", "#2f7fd1", "#f2f2f2", "#1d1d24", "#7a3cff", "#20b
 export function setup(api) {
   const T = api.tuning, G = api.data;
   api.env({ preset: "city-night", layout: "strip", width: 12, lanes: 3, track: "road" });
-  G.player = api.spawn("taxi", { tag: "player", pos: [0, 0, 0] });
-  G.lane = 1; G.vy = 0; G.speed = T.startSpeed; G.nextRow = -70; G.stage = 0; G.finish = null;
+  G.lane = api.mp ? [1, 0, 2][api.mp.slot % 3] : 1; // racers start in different lanes
+  G.player = api.spawn("taxi", { tag: "player", pos: [api.laneX(G.lane), 0, 0] });
+  G.vy = 0; G.speed = T.startSpeed; G.nextRow = -70; G.stage = 0; G.finish = null;
   G.shield = 0; G.magnet = 0; G.combo = 0; G.comboT = 0; G.bubble = null;
   api.follow(G.player, { offset: [0, 4.2, 9.5], look: [0, 1.2, -12] });
   api.message("STAGE 1", "Downtown — pick up fares!", 2.2);

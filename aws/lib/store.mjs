@@ -6,12 +6,13 @@
 //   GAME#<id>       VERSION#0001            summary, score, at (payload in S3: games/<id>/v1.json)
 //   GAME#<id>       CHAT#<ts>#<rand>        role, text, version…
 //   GAME#<id>       FEEDBACK#<id>           text, name, kind (bug|idea), status, reports
-//   GAME#<id>       SCORE#<inverted>#<ts>   leaderboard entry
+//   GAME#<id>       LB#<period>#<country>#<inverted>#<ts>   leaderboard entry; period ALL | W2026-44 | M2026-10,
+//                                           country ALL or ISO code (each score is written to every board it counts on)
 //   GAME#<id>       TASK#<taskId>           browser task result (TTL)
 //   SPEND           TOTAL                   AI spend counter (hard cap)
 import crypto from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const TABLE = process.env.TABLE, BUCKET = process.env.BUCKET;
@@ -170,12 +171,28 @@ export async function setFeedback(id, fid, status) {
   await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `GAME#${id}`, sk: `FEEDBACK#${fid}` }, UpdateExpression: "SET #s = :s", ExpressionAttributeNames: { "#s": "status" }, ExpressionAttributeValues: { ":s": status } }));
 }
 
-// ---- leaderboards ----
-export async function addScore(gameId, e) {
-  const inv = String(1e7 - Math.min(1e7 - 1, Math.max(0, Math.round(e.score)))).padStart(8, "0");
-  await putItem({ pk: `GAME#${gameId}`, sk: `SCORE#${inv}#${Date.now()}`, ...e, at: new Date().toISOString() });
+// ---- leaderboards: this week, this month and all time; worldwide or per country ----
+// ISO week in UTC, e.g. "2026-44" (weeks start on Monday).
+export function isoWeek(d = new Date()) {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const y = t.getUTCFullYear(), w = Math.ceil(((t - Date.UTC(y, 0, 1)) / 864e5 + 1) / 7);
+  return `${y}-${String(w).padStart(2, "0")}`;
 }
-export const topScores = async (gameId, n = 10) => (await queryPrefix(`GAME#${gameId}`, "SCORE#", { limit: n })).map(({ name, score, progress, won, time, at }) => ({ name, score, progress, won, time, at }));
+export const boardKey = (period, d = new Date()) => (period === "week" ? `W${isoWeek(d)}` : period === "month" ? `M${d.toISOString().slice(0, 7)}` : "ALL");
+// Weekly and monthly entries expire on their own once their board is over.
+const BOARDS = [["all", 0], ["week", 21 * 864e5], ["month", 92 * 864e5]];
+export async function addScore(gameId, e, at = new Date()) {
+  const inv = String(1e7 - Math.min(1e7 - 1, Math.max(0, Math.round(e.score)))).padStart(8, "0"), ts = at.getTime();
+  const items = [];
+  for (const [period, keep] of BOARDS) for (const c of e.country ? ["ALL", e.country] : ["ALL"]) {
+    items.push({ pk: `GAME#${gameId}`, sk: `LB#${boardKey(period, at)}#${c}#${inv}#${ts}`, ...e, at: at.toISOString(), ...(keep ? { ttl: Math.floor((ts + keep) / 1000) } : {}) });
+  }
+  await db.send(new BatchWriteCommand({ RequestItems: { [TABLE]: items.map((Item) => ({ PutRequest: { Item } })) } }));
+  return ts;
+}
+export const topScores = async (gameId, n = 10, { period = "all", country = "ALL" } = {}) =>
+  (await queryPrefix(`GAME#${gameId}`, `LB#${boardKey(period)}#${country}#`, { limit: n })).map(({ sk, name, score, progress, won, time, at, country: c }) => ({ name, score, progress, won, time, at, country: c || null, ts: +sk.split("#").pop() }));
 
 // ---- browser task results (the worker waits for these) ----
 export const putTaskResult = (gameId, taskId, result) => putItem({ pk: `GAME#${gameId}`, sk: `TASK#${taskId}`, result: JSON.stringify(result ?? null), ttl: Math.floor(Date.now() / 1000) + 3600 });
