@@ -113,10 +113,17 @@ async function loadCircle(change) {
   if (!r.ok) return ($("shareErr").textContent = j.error || "Something went wrong");
   $("shareErr").textContent = "";
   members = j.members; renderMembers();
+  if (j.invited === true) $("shareNote").textContent = `✉️ Invite emailed to ${change.email}.`;
+  if (j.invited === false) $("shareNote").textContent = `Added ${change.email}, but the invite email didn't go out — send them the ▶ Play link.`;
 }
 document.querySelectorAll('input[name="vis"]').forEach((r) => (r.onchange = async () => {
   $("shareErr").textContent = "";
-  try { await post(`/api/projects/${id}/visibility`, { visibility: r.value }); state.visibility = r.value; } catch (err) { $("shareErr").textContent = err.message; }
+  $("shareNote").textContent = "";
+  try {
+    const j = await post(`/api/projects/${id}/visibility`, { visibility: r.value });
+    state.visibility = r.value;
+    if (j.notified) $("shareNote").textContent = `✉️ Emailed ${j.notified} ${j.notified === 1 ? "person" : "people"} in your circle about this game.`;
+  } catch (err) { $("shareErr").textContent = err.message; }
   renderShare();
 }));
 $("circleAdd").onsubmit = async (e) => { e.preventDefault(); await loadCircle({ email: $("circleEmail").value }); if (!$("shareErr").textContent) $("circleEmail").value = ""; };

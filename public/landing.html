@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Napkin Arcade</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <meta name="description" content="Draw a game on a napkin or describe it. A studio of NVIDIA Nemotron agents designs, models, codes and playtests it in 3D — then you play it with friends from a link.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,7 +17,7 @@
     .wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
     nav { position: fixed; top: 0; left: 0; right: 0; z-index: 20; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: rgba(7,6,13,.55); border-bottom: 1px solid var(--line); }
     nav .wrap { display: flex; align-items: center; gap: 22px; height: 62px; }
-    .logo { font: 20px "Russo One", sans-serif; text-decoration: none; white-space: nowrap; }
+    .logo { font: 20px "Russo One", sans-serif; text-decoration: none; white-space: nowrap; } .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; } .logo .mark { flex: none; display: block; } .logo b { font-weight: inherit; background: linear-gradient(135deg, #ff2fa0, #ff7a3d); -webkit-background-clip: text; background-clip: text; color: transparent; } .foot { display: inline-flex; align-items: center; gap: 6px; } .foot .mark { display: block; }
     nav .links { display: flex; gap: 20px; margin-left: auto; font-weight: 600; font-size: 14px; color: var(--muted); }
     nav .links a { text-decoration: none; } nav .links a:hover { color: var(--ink); }
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: 16px "Russo One", sans-serif; text-decoration: none; color: #fff; border: 0; border-radius: 14px; padding: 13px 22px; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--orange)); box-shadow: 0 12px 34px rgba(255,47,160,.35); transition: transform .15s; }
@@ -94,7 +95,7 @@
 </head>
 <body>
   <nav><div class="wrap">
-    <a class="logo" href="/">✏️🎮 Napkin Arcade</a>
+    <a class="logo" href="/"><img class="mark" src="/logo.svg" alt="" width="34" height="34"><span>Napkin <b>Arcade</b></span></a>
     <div class="links"><a href="/arcade">Free arcade</a><a href="#how">How it works</a><a href="#play">Play</a><a href="#multiplayer">Multiplayer</a><a href="#gallery">Gallery</a></div>
     <a class="btn small" id="navCta" href="/login?next=/studio">Sign in</a>
   </div></nav>
@@ -174,7 +175,7 @@
     <a class="btn" id="finalCta" href="/login?next=/studio">✏️ Create your game</a>
   </div></section>
 
-  <footer><div class="wrap"><span>✏️🎮 Napkin Arcade — built for the Nebius × NVIDIA Global AI Hackathon</span><span>NVIDIA Nemotron on Nebius Token Factory · three.js</span></div></footer>
+  <footer><div class="wrap"><span class="foot"><img class="mark" src="/logo.svg" alt="" width="20" height="20">Napkin Arcade — built for the Nebius × NVIDIA Global AI Hackathon</span><span>NVIDIA Nemotron on Nebius Token Factory · three.js</span></div></footer>
 
   <script>
     const $ = (id) => document.getElementById(id);

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · Napkin Arcade</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -13,7 +14,7 @@
     .bg { position: fixed; inset: 0; border: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
     .shade { position: fixed; inset: 0; background: radial-gradient(ellipse at center, rgba(7,6,13,.35), rgba(7,6,13,.92)); pointer-events: none; }
     .card { position: relative; width: min(420px, 100%); background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--line); border-radius: 22px; padding: 28px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
-    .logo { font: 26px "Russo One", sans-serif; text-decoration: none; color: var(--ink); display: inline-block; margin-bottom: 10px; }
+    .logo { font: 26px "Russo One", sans-serif; text-decoration: none; color: var(--ink); display: inline-block; margin-bottom: 10px; } .logo { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; } .logo .mark { flex: none; display: block; } .logo b { font-weight: inherit; background: linear-gradient(135deg, #ff2fa0, #ff7a3d); -webkit-background-clip: text; background-clip: text; color: transparent; } .foot { display: inline-flex; align-items: center; gap: 6px; } .foot .mark { display: block; }
     h1 { font: 24px "Russo One", sans-serif; margin: 6px 0 4px; }
     p { color: var(--muted); margin: 0 0 18px; }
     label { display: block; font-weight: 600; font-size: 14px; margin: 12px 0 6px; }
@@ -32,7 +33,7 @@
   <iframe class="bg" src="/engine3d/runtime.html?example=runner&mode=view&quiet=1" sandbox="allow-scripts" title="" tabindex="-1" aria-hidden="true"></iframe>
   <div class="shade"></div>
   <main class="card">
-    <a class="logo" href="/">✏️🎮 Napkin Arcade</a>
+    <a class="logo" href="/"><img class="mark" src="/logo.svg" alt="" width="34" height="34"><span>Napkin <b>Arcade</b></span></a>
     <form id="step1">
       <h1>Sign in or sign up</h1>
       <p>We'll email you a 6-digit code. No password needed.</p>

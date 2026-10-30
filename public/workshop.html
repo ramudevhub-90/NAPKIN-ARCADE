@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Game workshop · Napkin Arcade</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/style.css">
   <style>
     .ws { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 16px; padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
@@ -54,7 +55,7 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand"><a class="logo" href="/" style="text-decoration:none">✏️🎮</a><div><h1>Game workshop</h1><p>Talk to the studio to keep improving your game. Approve player feedback to upgrade it.</p></div></div>
+    <div class="brand"><a class="logo" href="/" aria-label="Napkin Arcade home"><img class="mark" src="/logo.svg" alt="" width="46" height="46"></a><div><h1>Game workshop</h1><p>Talk to the studio to keep improving your game. Approve player feedback to upgrade it.</p></div></div>
     <div class="userbar"><a href="/studio#mine" class="ub">← My games</a><a href="/studio" class="ub">New game</a></div>
   </header>
 
@@ -73,10 +74,11 @@
           <label class="opt"><input type="radio" name="vis" value="circle"><span><b>🔒 My circle</b><small>Only you and the people in your circle, signed in with their email. Hidden from the arcade.</small></span></label>
         </div>
         <div id="circleBox" class="circlebox">
-          <p class="muted" style="margin:10px 0 6px;font-size:13px"><b>My circle</b> · shared by all your circle-only games. People join by signing in with the email you add; send them the ▶ Play link.</p>
+          <p class="muted" style="margin:10px 0 6px;font-size:13px"><b>My circle</b> · shared by all your circle-only games. Everyone you add gets an email invite and signs in with that email.</p>
           <form class="compose" id="circleAdd" style="margin-top:0"><input id="circleEmail" type="email" placeholder="friend@example.com" required><button class="btn primary">Add</button></form>
           <div id="members" class="members"></div>
         </div>
+        <p class="muted" id="shareNote" style="margin:8px 0 0;font-size:13px"></p>
         <p class="err" id="shareErr"></p>
       </div>
       <div class="card" style="margin-top:16px">

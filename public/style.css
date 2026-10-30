@@ -5,7 +5,7 @@
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 h1 { margin: 0; font-size: 24px; } h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 8px; }
 .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--line); }
-.brand { display: flex; gap: 12px; align-items: center; } .brand p { margin: 0; color: var(--muted); } .logo { font-size: 28px; }
+.brand { display: flex; gap: 12px; align-items: center; } .brand p { margin: 0; color: var(--muted); } .logo { display: block; line-height: 0; transition: transform .2s; } .logo:hover { transform: rotate(-6deg) scale(1.06); }
 .meter { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); padding: 6px 12px; border-radius: 12px; }
 .meter b { color: var(--amber); margin-right: 8px; font-variant-numeric: tabular-nums; } .label { color: var(--muted); font-size: 12px; }
 .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); margin-right: 8px; }

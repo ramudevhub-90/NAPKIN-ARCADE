@@ -11,6 +11,7 @@ import { startSession, logout, me, currentUser, chargeBuild, chargeRevision, cog
 import { createRoom, handleUpgrade } from "./rooms.js";
 import * as store from "../aws/lib/store.mjs";
 import { publishStudioEvent } from "../aws/lib/appsync.mjs";
+import { sendMail, circleInviteEmail, gameSharedEmail } from "../aws/lib/mail.mjs";
 
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), "..");
 const PUBLIC = path.join(ROOT, "public");
@@ -189,12 +190,20 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST") {
         const b = await body(req, 2e3), email = String(b.email || "").trim().toLowerCase();
         if (!EMAIL.test(email)) return json(res, 400, { error: "That doesn't look like an email address." });
+        let invited = null;
         if (b.remove) await store.removeFromCircle(user.sub, email);
         else {
           if (email === user.email) return json(res, 400, { error: "You can always play your own games." });
-          if ((await store.circle(user.sub)).length >= 200) return json(res, 400, { error: "Your circle is full (200 people)." });
-          await store.addToCircle(user, email);
+          const members = await store.circle(user.sub);
+          if (members.length >= 200) return json(res, 400, { error: "Your circle is full (200 people)." });
+          if (!members.some((m) => m.email === email)) {
+            await store.addToCircle(user, email);
+            // Email the invite with the creator's circle-only games; replies go to the creator.
+            const games = (await store.myGames(user.sub)).filter((m) => m.status === "ready" && m.visibility === "circle");
+            invited = await sendMail({ to: email, replyTo: user.email, ...circleInviteEmail({ from: user.name, to: email, games }) }).then(() => true, (e) => (console.error("invite email:", e.message), false));
+          }
         }
+        return json(res, 200, { invited, members: (await store.circle(user.sub)).map(({ email, at }) => ({ email, at })) });
       }
       return json(res, 200, { members: (await store.circle(user.sub)).map(({ email, at }) => ({ email, at })) });
     }
@@ -249,11 +258,18 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true, visibility: meta.visibility || "public", ticket: meta.visibility === "circle" ? playTicket(id) : null });
       }
       if (what === "visibility" && req.method === "POST") {
-        await ownedGame(req, id);
+        const { user, meta } = await ownedGame(req, id);
         const v = (await body(req, 1e3)).visibility;
         if (v !== "public" && v !== "circle") return json(res, 400, { error: "Choose public or circle." });
         await store.setVisibility(id, v);
-        return json(res, 200, { ok: true, visibility: v });
+        // Newly circle-only: let the people already in the circle know.
+        let notified = 0;
+        if (v === "circle" && meta.visibility !== "circle") {
+          const game = { id, title: meta.title, tagline: meta.tagline };
+          const sent = await Promise.all((await store.circle(user.sub)).map((m) => sendMail({ to: m.email, replyTo: user.email, ...gameSharedEmail({ from: user.name, to: m.email, game }) }).then(() => 1, (e) => (console.error("share email:", e.message), 0))));
+          notified = sent.reduce((a, b) => a + b, 0);
+        }
+        return json(res, 200, { ok: true, visibility: v, notified });
       }
       if (what === "workshop") {
         const { meta, game } = await ownedGame(req, id);

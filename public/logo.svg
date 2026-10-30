@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Napkin Arcade">
+  <defs>
+    <linearGradient id="na-napkin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff2fa0"/>
+      <stop offset="1" stop-color="#ff7a3d"/>
+    </linearGradient>
+    <linearGradient id="na-fold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe3d3"/>
+      <stop offset="1" stop-color="#ffb48f"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-7 32 32)">
+    <!-- the napkin, with its top-right corner folded down -->
+    <path d="M12 7h31l14 14v31a5 5 0 0 1-5 5H12a5 5 0 0 1-5-5V12a5 5 0 0 1 5-5z" fill="url(#na-napkin)"/>
+    <path d="M43 7v9a5 5 0 0 0 5 5h9z" fill="url(#na-fold)"/>
+    <!-- a pencil scribble: the idea -->
+    <path d="M14 17c3-3 6-3 8 0s5 3 8 0" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" opacity=".85"/>
+    <!-- the game it becomes -->
+    <path d="M22 28h20c5 0 7.5 3 8.6 7.6l2 8.4c.9 3.8-.9 6-3.6 6-2.2 0-3.5-1.4-4.6-3.6l-1.4-2.8H21l-1.4 2.8c-1.1 2.2-2.4 3.6-4.6 3.6-2.7 0-4.5-2.2-3.6-6l2-8.4C14.5 31 17 28 22 28z" fill="#fff"/>
+    <path d="M22.5 33v8M18.5 37h8" stroke="#ff3d8f" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="40" cy="34.5" r="2.4" fill="#ff5a5f"/>
+    <circle cx="44.6" cy="39" r="2.4" fill="#ff8a3d"/>
+  </g>
+</svg>
