@@ -1,0 +1,28 @@
+{
+  "name": "napkin-arcade",
+  "version": "0.1.0",
+  "description": "Draw or describe a game; an AI studio of NVIDIA Nemotron agents builds it in 3D, playtests it with vision, and tunes it until it is fun.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.mjs",
+    "deploy": "deploy/deploy.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.716.0",
+    "@aws-sdk/credential-providers": "^3.716.0",
+    "acorn": "^8.14.0",
+    "acorn-walk": "^8.3.4",
+    "nodemailer": "^6.9.16",
+    "ws": "^8.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ramudevhub-90/NAPKIN-ARCADE"
+  }
+}

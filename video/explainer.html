@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Napkin Arcade explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #07060d; --card: rgba(21, 19, 42, .86); --ink: #f4f1ff; --muted: #b7b1d4; --line: rgba(255,255,255,.12); --pink: #ff2fa0; --orange: #ff8a3d; --cyan: #3ef0ff; --nv: #76b900; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; }
+  #bg { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; transition: opacity 1s; }
+  #bg.on { opacity: 1; }
+  #shade { position: fixed; inset: 0; background: linear-gradient(90deg, rgba(7,6,13,.94) 0%, rgba(7,6,13,.72) 48%, rgba(7,6,13,.2) 100%); }
+  .scene { position: absolute; inset: 0; padding: 120px 150px 230px; display: flex; flex-direction: column; justify-content: center; opacity: 0; transform: translateY(18px); transition: opacity .8s ease, transform .8s ease; }
+  .scene.on { opacity: 1; transform: none; }
+  .kicker { display: inline-block; font: 700 24px Inter; letter-spacing: .14em; text-transform: uppercase; color: var(--cyan); border: 2px solid rgba(62,240,255,.35); background: rgba(62,240,255,.08); padding: 10px 20px; border-radius: 999px; margin-bottom: 34px; align-self: flex-start; }
+  h1 { font: 150px/0.98 "Russo One", sans-serif; margin: 0; }
+  h1 .g, .url { background: linear-gradient(90deg, var(--cyan), var(--pink) 55%, var(--orange)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { font-size: 46px; color: var(--muted); margin-top: 30px; max-width: 1200px; }
+  .napkin { position: absolute; right: 170px; top: 210px; width: 430px; background: #fffdf6; color: #2a2a35; border-radius: 16px; padding: 30px; font: 600 34px/1.35 "Comic Sans MS", "Marker Felt", cursive; transform: rotate(4deg); box-shadow: 0 30px 70px rgba(0,0,0,.5); }
+  h2 { font: 58px/1.05 "Russo One", sans-serif; margin: 0 0 30px; }
+  .scene.studio { justify-content: flex-start; padding-top: 70px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .agent { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px 24px; opacity: 0; transform: translateY(16px); transition: all .6s ease; }
+  .agent.on { opacity: 1; transform: none; }
+  .agent .ic { font-size: 40px; } .agent b { display: block; font-size: 29px; margin: 8px 0 4px; } .agent small { font: 700 20px Inter; color: var(--nv); } .agent p { font-size: 22px; color: var(--muted); margin: 8px 0 0; line-height: 1.32; }
+  .loop { margin-top: 24px; font: 600 25px Inter; color: var(--ink); display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+  .loop span { background: rgba(255,47,160,.12); border: 1px solid rgba(255,47,160,.4); border-radius: 14px; padding: 10px 18px; }
+  .url { font: 92px "Russo One", sans-serif; margin-top: 40px; }
+  .chips { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 44px; }
+  .chip { font: 600 26px Inter; border: 1px solid var(--line); border-radius: 999px; padding: 10px 22px; background: rgba(255,255,255,.05); }
+  .chip.nv { border-color: rgba(118,185,0,.6); color: #b6f05a; }
+  #cap { position: fixed; left: 0; right: 0; bottom: 0; padding: 36px 220px 48px; background: linear-gradient(180deg, transparent, rgba(4,3,10,.94) 35%); font: 500 36px/1.45 Inter; text-align: center; text-wrap: balance; color: #f6f3ff; }
+</style>
+</head>
+<body>
+  <iframe id="bg" src="https://napkinarcade.revenuerush.in/engine3d/runtime.html?example=runner&mode=view&quiet=1" sandbox="allow-scripts"></iframe>
+  <div id="shade"></div>
+
+  <section class="scene">
+    <span class="kicker">✏️🎮 Napkin Arcade</span>
+    <h1>Draw a game.<br><span class="g">AI builds it in 3D.</span><br>Play it with friends.</h1>
+    <div class="napkin">Taxi racing through a crowded neon city at night. Dodge traffic, pick up passengers!</div>
+  </section>
+
+  <section class="scene studio">
+    <h2>An AI game studio of NVIDIA Nemotron agents</h2>
+    <div class="grid">
+      <div class="agent"><div class="ic">🧠</div><b>Creative director</b><small>Nemotron 3 Ultra</small><p>Designs the game: core loop, three stages, a twist and an ending.</p></div>
+      <div class="agent"><div class="ic">🧊</div><b>3D artist</b><small>Nemotron 3 Ultra</small><p>Builds characters and props in 3D from primitives.</p></div>
+      <div class="agent"><div class="ic">🎨</div><b>Art director</b><small>Nemotron 3.5 Super VL</small><p>Reads your drawing and reviews every model render.</p></div>
+      <div class="agent"><div class="ic">🧑‍💻</div><b>Developer</b><small>Nemotron 3 Ultra</small><p>Writes the game code and fixes what QA finds.</p></div>
+      <div class="agent"><div class="ic">🤖</div><b>QA bots</b><small>15 bots · 3 skill levels</small><p>Run the real code in a sandbox and measure difficulty.</p></div>
+      <div class="agent"><div class="ic">👀</div><b>AI playtesters</b><small>Super VL + Nano</small><p>Watch the actual screen, play in character, and give notes.</p></div>
+      <div class="agent"><div class="ic">🧭</div><b>Studio lead</b><small>Nemotron 3 Ultra</small><p>Proposes fixes; only measured improvements ship.</p></div>
+      <div class="agent"><div class="ic">☁️</div><b>Nebius Token Factory</b><small>Every model call</small><p>Fast, cheap open models: about ten cents per finished game.</p></div>
+    </div>
+    <div class="loop"><span>design</span>→<span>model</span>→<span>review</span>→<span>code</span>→<span>test</span>→<span>playtest</span>→<span>fix</span>→<span>ship</span></div>
+  </section>
+
+  <section class="scene">
+    <span class="kicker">Live now</span>
+    <h1>Napkin Arcade</h1>
+    <div class="url">napkinarcade.revenuerush.in</div>
+    <div class="chips"><span class="chip nv">NVIDIA Nemotron 3 Ultra · Super · Super VL · Nano</span><span class="chip">Nebius Token Factory</span><span class="chip">Real-time 3D</span><span class="chip">Multiplayer</span></div>
+  </section>
+
+  <div id="cap"></div>
+<script>
+  // Driven by build.mjs: window.__REC = { scenes, durs, caps }.
+  const scenes = [...document.querySelectorAll(".scene")];
+  window.__START = async () => {
+    const R = window.__REC;
+    document.getElementById("bg").classList.add("on");
+    for (let i = 0; i < R.scenes.length; i++) {
+      scenes.forEach((s, k) => s.classList.toggle("on", k === R.scenes[i]));
+      document.getElementById("cap").textContent = R.caps[i];
+      const agents = scenes[R.scenes[i]].querySelectorAll(".agent");
+      agents.forEach((a, k) => setTimeout(() => a.classList.add("on"), 300 + k * 450));
+      await new Promise((r) => setTimeout(r, R.durs[i] * 1000));
+    }
+    window.__DONE = true;
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Napkin Arcade</title>
+  <meta name="description" content="Draw a game on a napkin or describe it. A studio of NVIDIA Nemotron agents designs, models, codes and playtests it in 3D — then you play it with friends from a link.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #07060d; --bg2: #0e0c1a; --card: #15132a; --ink: #f4f1ff; --muted: #a9a3c4; --line: rgba(255,255,255,.1); --pink: #ff2fa0; --orange: #ff8a3d; --cyan: #3ef0ff; --yellow: #ffd23f; --green: #39ff88; --nv: #76b900; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Inter, system-ui, sans-serif; overflow-x: hidden; }
+    a { color: inherit; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+    nav { position: fixed; top: 0; left: 0; right: 0; z-index: 20; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: rgba(7,6,13,.55); border-bottom: 1px solid var(--line); }
+    nav .wrap { display: flex; align-items: center; gap: 22px; height: 62px; }
+    .logo { font: 20px "Russo One", sans-serif; text-decoration: none; white-space: nowrap; }
+    nav .links { display: flex; gap: 20px; margin-left: auto; font-weight: 600; font-size: 14px; color: var(--muted); }
+    nav .links a { text-decoration: none; } nav .links a:hover { color: var(--ink); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: 16px "Russo One", sans-serif; text-decoration: none; color: #fff; border: 0; border-radius: 14px; padding: 13px 22px; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--orange)); box-shadow: 0 12px 34px rgba(255,47,160,.35); transition: transform .15s; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn.ghost { background: rgba(255,255,255,.08); box-shadow: none; border: 1px solid var(--line); }
+    .btn.small { font-size: 14px; padding: 9px 16px; border-radius: 11px; }
+    header.hero { position: relative; min-height: 100vh; display: flex; align-items: center; overflow: hidden; }
+    .hero iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+    .hero .shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7,6,13,.92) 0%, rgba(7,6,13,.7) 45%, rgba(7,6,13,.15) 100%), linear-gradient(0deg, var(--bg) 0%, transparent 30%); }
+    .hero .wrap { position: relative; width: 100%; padding-top: 80px; padding-bottom: 60px; }
+    .eyebrow { display: inline-flex; gap: 8px; align-items: center; font-weight: 700; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--cyan); background: rgba(62,240,255,.08); border: 1px solid rgba(62,240,255,.25); padding: 6px 12px; border-radius: 99px; }
+    h1 { font: clamp(40px, 6.4vw, 82px)/1.02 "Russo One", sans-serif; margin: 18px 0 18px; max-width: 760px; }
+    h1 .grad { background: linear-gradient(90deg, var(--cyan), var(--pink) 55%, var(--orange)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .lede { font-size: clamp(17px, 2vw, 20px); color: #d8d3ee; max-width: 620px; margin: 0 0 30px; }
+    .ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+    .powered { margin-top: 34px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); align-items: center; }
+    .chip { border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px; background: rgba(255,255,255,.04); }
+    .chip.nv { border-color: rgba(118,185,0,.5); color: #b6f05a; }
+    section { padding: 96px 0; }
+    h2 { font: clamp(30px, 4vw, 46px)/1.1 "Russo One", sans-serif; margin: 0 0 12px; }
+    .sub { color: var(--muted); font-size: 18px; max-width: 680px; margin: 0 0 40px; }
+    /* video */
+    .video { position: relative; border-radius: 22px; overflow: hidden; border: 1px solid var(--line); background: var(--card); aspect-ratio: 16 / 9; box-shadow: 0 40px 100px rgba(0,0,0,.5); }
+    .video video, .video iframe { width: 100%; height: 100%; display: block; border: 0; }
+    .video .soon { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; background: linear-gradient(180deg, rgba(7,6,13,.2), rgba(7,6,13,.85)); }
+    .video .soon b { font: 24px "Russo One", sans-serif; display: block; }
+    /* live demo */
+    .demo { display: grid; grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1.25fr); gap: 18px; align-items: stretch; }
+    .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; min-width: 0; }
+    .panel h3 { margin: 0 0 10px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+    .napkin { background: #fffdf6; border-radius: 12px; padding: 14px; color: #2a2a35; font: 600 17px/1.4 "Comic Sans MS", "Marker Felt", cursive; transform: rotate(-2deg); box-shadow: 0 10px 24px rgba(0,0,0,.35); min-height: 150px; }
+    .steps { display: flex; flex-direction: column; gap: 8px; }
+    .step { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; padding: 9px 10px; border-radius: 12px; border: 1px solid transparent; opacity: .35; transition: all .35s; }
+    .step.on { opacity: 1; border-color: rgba(255,47,160,.45); background: rgba(255,47,160,.07); }
+    .step.done { opacity: .9; }
+    .step .ic { font-size: 22px; line-height: 1; }
+    .step b { display: block; font-size: 14px; } .step span { font-size: 12.5px; color: var(--muted); display: block; }
+    .screen { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: #000; }
+    .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    .score { display: flex; gap: 8px; align-items: flex-end; height: 70px; margin-top: 12px; }
+    .score div { flex: 1; background: linear-gradient(180deg, var(--pink), var(--orange)); border-radius: 8px 8px 0 0; height: 4%; transition: height .8s; position: relative; }
+    .score div::after { content: attr(data-v); position: absolute; top: -20px; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--muted); }
+    /* agents grid */
+    .agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 48px; }
+    .agent { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+    .agent .ic { font-size: 28px; } .agent b { display: block; margin: 8px 0 2px; } .agent small { color: var(--cyan); font-weight: 600; } .agent p { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+    /* play */
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .tabs button { font: 600 14px Inter, sans-serif; color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 99px; padding: 8px 16px; cursor: pointer; }
+    .tabs button.on { background: var(--ink); color: var(--bg); }
+    .player { position: relative; border-radius: 20px; overflow: hidden; aspect-ratio: 16 / 9; border: 1px solid var(--line); background: #000; }
+    .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 30px; }
+    .game { text-decoration: none; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: block; transition: transform .15s, border-color .15s; }
+    .game:hover { transform: translateY(-3px); border-color: rgba(255,47,160,.5); }
+    .game .art { height: 92px; border-radius: 12px; margin-bottom: 12px; display: grid; place-items: center; font-size: 34px; }
+    .game b { display: block; } .game span { color: var(--muted); font-size: 13.5px; display: block; }
+    /* multiplayer */
+    .mp { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+    .flow { display: grid; gap: 12px; }
+    .flow div { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+    .flow i { font-style: normal; font: 18px "Russo One", sans-serif; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgba(62,240,255,.1); color: var(--cyan); }
+    .lobby { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 22px; }
+    .lobby .link { font: 600 14px ui-monospace, monospace; background: rgba(255,255,255,.06); border-radius: 10px; padding: 10px 12px; color: var(--cyan); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lobby ul { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+    .lobby li { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.04); border-radius: 12px; padding: 10px 12px; font-weight: 600; }
+    .lobby li em { font-style: normal; margin-left: auto; color: var(--muted); font-weight: 500; font-size: 13px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .cta-final { text-align: center; background: radial-gradient(ellipse at center, rgba(255,47,160,.18), transparent 70%); }
+    footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; padding: 28px 0 40px; }
+    footer .wrap { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
+    @media (max-width: 960px) { .demo { grid-template-columns: 1fr; } .mp { grid-template-columns: 1fr; } nav .links { display: none; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn { transition: none; } }
+  </style>
+</head>
+<body>
+  <nav><div class="wrap">
+    <a class="logo" href="/">✏️🎮 Napkin Arcade</a>
+    <div class="links"><a href="/arcade">Free arcade</a><a href="#how">How it works</a><a href="#play">Play</a><a href="#multiplayer">Multiplayer</a><a href="#gallery">Gallery</a></div>
+    <a class="btn small" id="navCta" href="/login?next=/studio">Sign in</a>
+  </div></nav>
+
+  <header class="hero">
+    <iframe src="/engine3d/runtime.html?example=runner&mode=view&quiet=1" sandbox="allow-scripts" title="" tabindex="-1" aria-hidden="true"></iframe>
+    <div class="shade"></div>
+    <div class="wrap">
+      <span class="eyebrow">⚡ An AI game studio in your browser</span>
+      <h1>Draw a game.<br><span class="grad">AI builds it in 3D.</span><br>Play it with friends.</h1>
+      <p class="lede">Snap a napkin sketch or type one sentence. A studio of NVIDIA Nemotron agents designs it, models it, writes the code, playtests it with real vision — and only ships it once it's fun. Then share a link and race your friends.</p>
+      <div class="ctas"><a class="btn" id="heroCta" href="/login?next=/studio">✏️ Create your game — free</a><a class="btn ghost" href="/arcade">🕹 Play free games</a><a class="btn ghost" href="#video">▶ Watch the demo</a></div>
+      <div class="powered"><span class="chip nv">NVIDIA Nemotron 3 Ultra · Super · Super VL · Nano</span><span class="chip">Nebius Token Factory</span><span class="chip">Real-time 3D</span><span class="chip">Multiplayer rooms</span></div>
+    </div>
+  </header>
+
+  <section id="video"><div class="wrap">
+    <h2>See it in two minutes</h2>
+    <p class="sub">From a scribble to a playable 3D game, built and playtested by AI agents — then shared with friends.</p>
+    <div class="video" id="videoBox">
+      <iframe src="https://www.youtube-nocookie.com/embed/aGX1owDcOKo?rel=0&amp;modestbranding=1" title="Napkin Arcade demo video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>
+    </div>
+    <p style="margin-top:14px"><a class="btn ghost small" href="https://youtu.be/aGX1owDcOKo" target="_blank" rel="noopener">▶ Watch on YouTube</a></p>
+  </div></section>
+
+  <section id="how" style="background:var(--bg2)"><div class="wrap">
+    <h2>Watch the studio work</h2>
+    <p class="sub">A real run, replayed: one sentence in, a tested 3D game out. Every step is a Nemotron agent — and the bots run the real code.</p>
+    <div class="demo">
+      <div class="panel"><h3>The idea</h3><div class="napkin" id="napkin"></div></div>
+      <div class="panel"><h3>The AI studio</h3><div class="steps" id="steps"></div></div>
+      <div class="panel"><h3 id="screenTitle">The game</h3><div class="screen"><iframe id="demoGame" sandbox="allow-scripts" title="Demo game" tabindex="-1"></iframe></div>
+        <div class="score" id="scoreBars"><div data-v=""></div><div data-v=""></div></div></div>
+    </div>
+    <div class="agents">
+      <div class="agent"><div class="ic">🎨</div><b>Art director</b><small>Nemotron 3.5 Super VL</small><p>Reads your drawing — characters, rules, scribbled notes — and reviews every 3D model with vision.</p></div>
+      <div class="agent"><div class="ic">🧠</div><b>Creative director</b><small>Nemotron 3 Ultra</small><p>Turns the idea into a game people want to play: a core loop, three stages, a twist and an ending.</p></div>
+      <div class="agent"><div class="ic">🧊</div><b>3D artist</b><small>Nemotron 3 Ultra</small><p>Builds the characters and props in 3D, then fixes whatever the art director flags.</p></div>
+      <div class="agent"><div class="ic">🧑‍💻</div><b>Developer</b><small>Nemotron 3 Ultra</small><p>Writes the game code. A linter and crash reports send bugs straight back until it runs.</p></div>
+      <div class="agent"><div class="ic">🤖</div><b>QA bots</b><small>15 bots, 3 skill levels</small><p>Play the real game headless to measure who wins, where they die and how long a run lasts.</p></div>
+      <div class="agent"><div class="ic">👀</div><b>AI playtesters</b><small>Nemotron 3.5 Super VL + Nano</small><p>Look at the actual screen, play in character — a 7-year-old, a grandpa — and say what's fun.</p></div>
+      <div class="agent"><div class="ic">🧭</div><b>Studio lead</b><small>Nemotron 3 Ultra</small><p>Proposes three fixes. The bots test each one and only a measurable improvement ships.</p></div>
+    </div>
+  </div></section>
+
+  <section id="play"><div class="wrap">
+    <h2>Play right now — free</h2>
+    <p class="sub">Six polished games on the same engine the AI uses: power-ups, combos, global leaderboards and multiplayer rooms. Keyboard or touch — no install, no sign-in.</p>
+    <div class="tabs" id="tabs"><button data-g="runner" class="on">🚕 Neon Cab Rush</button><button data-g="flyer">🚀 Ring Rider</button><button data-g="arena">🐶 Star Pup Panic</button><button data-g="skier">⛷️ Frost Fall</button><button data-g="meteors">☄️ Meteor Mayhem</button><button data-g="reef">🐠 Reef Rush</button></div>
+    <div class="player"><iframe id="player" sandbox="allow-scripts" allow="autoplay" title="Showcase game"></iframe></div>
+    <p style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><a class="btn ghost small" id="openFull" href="/play/example-runner">⤢ Open full screen &amp; invite friends</a><a class="btn small" href="/arcade">🕹 All free games</a></p>
+    <div id="gallery"></div>
+  </div></section>
+
+  <section id="multiplayer" style="background:var(--bg2)"><div class="wrap mp">
+    <div>
+      <h2>Share a link.<br>Race together.</h2>
+      <p class="sub">Every game is multiplayer-ready. Same world, same obstacles, everyone live on screen with a leaderboard.</p>
+      <div class="flow">
+        <div><i>1</i><span><b>Open any game</b> and press <b>Play with friends</b>.</span></div>
+        <div><i>2</i><span><b>Share the link.</b> Friends who open it join your room automatically.</span></div>
+        <div><i>3</i><span><b>Start the race.</b> 3-2-1 countdown, then see your rivals' cars in your world.</span></div>
+        <div><i>4</i><span><b>Podium.</b> Ranked by finish, progress and score. Rematch in one tap.</span></div>
+      </div>
+    </div>
+    <div class="lobby" aria-label="Example lobby">
+      <div style="font:18px 'Russo One',sans-serif;margin-bottom:10px">Room 7F3A2C · Neon Fare</div>
+      <div class="link">napkin.arcade/play/neon-fare?room=7F3A2C</div>
+      <ul><li><span class="dot" style="background:var(--pink)"></span>Ramu<em>host</em></li><li><span class="dot" style="background:var(--cyan)"></span>Priya<em>ready</em></li><li><span class="dot" style="background:var(--yellow)"></span>Alex<em>ready</em></li><li><span class="dot" style="background:var(--green)"></span>Sam<em>joining…</em></li></ul>
+      <button class="btn" style="width:100%;margin-top:16px" tabindex="-1">🏁 Start race</button>
+    </div>
+  </div></section>
+
+  <section class="cta-final"><div class="wrap">
+    <h2>What will you draw?</h2>
+    <p class="sub" style="margin:0 auto 28px">Sign in with your email — we send a one-time code, no password. Your first games are on us.</p>
+    <a class="btn" id="finalCta" href="/login?next=/studio">✏️ Create your game</a>
+  </div></section>
+
+  <footer><div class="wrap"><span>✏️🎮 Napkin Arcade — built for the Nebius × NVIDIA Global AI Hackathon</span><span>NVIDIA Nemotron on Nebius Token Factory · three.js</span></div></footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    // Signed in? Point CTAs straight to the studio.
+    fetch("/api/auth/me").then((r) => r.json()).then(({ user }) => {
+      if (!user) return;
+      $("navCta").textContent = `Studio · ${user.name}`;
+      for (const id of ["navCta", "heroCta", "finalCta"]) $(id).href = "/studio";
+    }).catch(() => {});
+
+    // Showcase player.
+    const show = (g) => { $("player").src = `/engine3d/runtime.html?example=${g}`; $("openFull").href = `/play/example-${g}`; };
+    for (const b of document.querySelectorAll("#tabs button")) b.onclick = () => { document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b)); show(b.dataset.g); };
+    show("runner");
+
+    // Community gallery.
+    const ART = { "city-night": ["#1b1233", "#ff2fa0", "🌃"], space: ["#05030f", "#3ef0ff", "🚀"], candy: ["#ffc8e6", "#ff5fa8", "🍭"], forest: ["#2f6e26", "#7cc65a", "🌲"], desert: ["#c9a36c", "#ffd23f", "🏜️"], snow: ["#cfdcec", "#ffffff", "❄️"], beach: ["#3ec8ff", "#ffd23f", "🏝️"], volcano: ["#3a0e08", "#ff6a1a", "🌋"], underwater: ["#0a3a5a", "#3ef0c8", "🐠"], synthwave: ["#2a0b4a", "#ff2fa0", "🌅"] };
+    fetch("/api/gallery").then((r) => r.json()).then(({ games }) => {
+      if (!games?.length) return;
+      $("gallery").innerHTML = `<h3 id="galleryTitle" style="margin:56px 0 0;font:24px 'Russo One',sans-serif">Made by the community</h3><div class="gallery">${games.map((g) => {
+        const [a, b, ic] = ART[g.preset] || ["#15132a", "#ff8a3d", "🎮"];
+        return `<a class="game" href="/play/${g.id}"><div class="art" style="background:linear-gradient(135deg,${a},${b})">${ic}</div><b>${esc(g.title || "Untitled")}</b><span>${esc(g.tagline)}</span><span style="margin-top:6px">by ${esc(g.by)}${g.score != null ? ` · fun ${g.score}` : ""}</span></a>`;
+      }).join("")}</div>`;
+      $("gallery").id = "gallery";
+    }).catch(() => {});
+
+    // Replay of a real studio run.
+    const RUN = {
+      idea: "Taxi racing inside a crowded neon city at night. Dodge traffic, pick up passengers, get them home before the meter runs out.",
+      steps: [
+        ["🎨", "Art director", "No drawing — reading the words"],
+        ["🧠", "Creative director", "“Neon Fare”: beat the meter; boosting burns it 3× faster"],
+        ["🧊", "3D artist", "Built “Neon Cab” — 22 parts"],
+        ["🎨", "Art review", "3/10: “a flat platform, no TAXI sign” → rebuilt"],
+        ["🧑‍💻", "Developer", "Wrote 305 lines of game code"],
+        ["🐞", "QA bots", "Crash found: “lanes is not defined” → fixed"],
+        ["👀", "Playtesters", "Mia, 7: “I love zooming!” · Grandpa Joe: “needs feedback”"],
+        ["🧭", "Studio lead", "Tested 3 fixes → kept “Fix core loop”: fun 14 → 40"],
+      ],
+      scores: [14, 40],
+    };
+    $("steps").innerHTML = RUN.steps.map(([ic, b, s]) => `<div class="step"><div class="ic">${ic}</div><div><b>${b}</b><span>${s}</span></div></div>`).join("");
+    let typed = 0, k = -1;
+    function tick() {
+      if (typed < RUN.idea.length) { typed += 3; $("napkin").textContent = RUN.idea.slice(0, typed); return setTimeout(tick, 40); }
+      const steps = document.querySelectorAll(".step");
+      if (k >= 0) steps[k].classList.replace("on", "done");
+      k++;
+      if (k === 4) $("demoGame").src = "/engine3d/runtime.html?example=runner&mode=view&quiet=1";
+      if (k === 7) [...$("scoreBars").children].forEach((d, i) => { d.style.height = Math.round(RUN.scores[i] * 0.7) + "px"; d.dataset.v = RUN.scores[i]; });
+      if (k < steps.length) { steps[k].classList.add("on"); return setTimeout(tick, 1700); }
+      setTimeout(() => { steps.forEach((s) => (s.className = "step")); typed = 0; k = -1; [...$("scoreBars").children].forEach((d) => { d.style.height = "3px"; d.dataset.v = ""; }); tick(); }, 6000);
+    }
+    new IntersectionObserver((es, o) => { if (es[0].isIntersecting) { o.disconnect(); tick(); } }, { threshold: 0.3 }).observe($("how"));
+
+  </script>
+</body>
+</html>

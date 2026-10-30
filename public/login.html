@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Napkin Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #07060d; --card: rgba(20, 18, 34, .78); --ink: #f4f1ff; --muted: #a9a3c4; --line: rgba(255,255,255,.12); --accent: #ff2fa0; --accent2: #ff8a3d; --cyan: #3ef0ff; --err: #ff7a8a; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 16px/1.5 Inter, system-ui, sans-serif; display: grid; place-items: center; padding: 16px; overflow-x: hidden; }
+    .bg { position: fixed; inset: 0; border: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
+    .shade { position: fixed; inset: 0; background: radial-gradient(ellipse at center, rgba(7,6,13,.35), rgba(7,6,13,.92)); pointer-events: none; }
+    .card { position: relative; width: min(420px, 100%); background: var(--card); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--line); border-radius: 22px; padding: 28px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+    .logo { font: 26px "Russo One", sans-serif; text-decoration: none; color: var(--ink); display: inline-block; margin-bottom: 10px; }
+    h1 { font: 24px "Russo One", sans-serif; margin: 6px 0 4px; }
+    p { color: var(--muted); margin: 0 0 18px; }
+    label { display: block; font-weight: 600; font-size: 14px; margin: 12px 0 6px; }
+    input { width: 100%; font: inherit; color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; outline: none; }
+    input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(62,240,255,.15); }
+    input.code { font: 28px "Russo One", sans-serif; letter-spacing: 12px; text-align: center; }
+    button { width: 100%; margin-top: 18px; font: 17px "Russo One", sans-serif; color: #fff; border: 0; border-radius: 14px; padding: 14px; cursor: pointer; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 12px 30px rgba(255,47,160,.35); }
+    button:disabled { opacity: .6; cursor: default; }
+    .link { background: none; box-shadow: none; color: var(--muted); font: 600 14px Inter, sans-serif; padding: 6px; margin-top: 10px; }
+    .msg { min-height: 20px; margin-top: 12px; font-size: 14px; color: var(--muted); }
+    .msg.err { color: var(--err); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <iframe class="bg" src="/engine3d/runtime.html?example=runner&mode=view&quiet=1" sandbox="allow-scripts" title="" tabindex="-1" aria-hidden="true"></iframe>
+  <div class="shade"></div>
+  <main class="card">
+    <a class="logo" href="/">✏️🎮 Napkin Arcade</a>
+    <form id="step1">
+      <h1>Sign in or sign up</h1>
+      <p>We'll email you a 6-digit code. No password needed.</p>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" required placeholder="you@example.com">
+      <button id="send">Email me a code</button>
+    </form>
+    <form id="step2" class="hidden">
+      <h1>Check your email</h1>
+      <p id="sentTo"></p>
+      <div id="nameBox" class="hidden"><label for="name">Your name (shown on your games)</label><input id="name" autocomplete="name" maxlength="40" placeholder="Ramu"></div>
+      <label for="code">6-digit code</label>
+      <input id="code" class="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required>
+      <button id="verify">Continue</button>
+      <button type="button" class="link" id="again">Use a different email</button>
+    </form>
+    <div class="msg" id="msg"></div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const next = new URLSearchParams(location.search).get("next") || "/studio";
+    const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/studio";
+    const say = (t, err) => { $("msg").textContent = t; $("msg").className = "msg" + (err ? " err" : ""); };
+    const post = async (url, body) => { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Something went wrong"); return j; };
+    fetch("/api/auth/me").then((r) => r.json()).then((j) => { if (j.user) location.replace(safeNext); });
+    $("step1").onsubmit = async (e) => {
+      e.preventDefault(); $("send").disabled = true; say("Sending…");
+      try {
+        const j = await post("/api/auth/code", { email: $("email").value });
+        $("step1").classList.add("hidden"); $("step2").classList.remove("hidden");
+        $("sentTo").textContent = `We sent a code to ${$("email").value.trim()}.`;
+        $("nameBox").classList.toggle("hidden", !j.newUser);
+        say(j.mail === "dev" ? "Dev mode: the code is printed in the server log." : "");
+        ($("nameBox").classList.contains("hidden") ? $("code") : $("name")).focus();
+      } catch (err) { say(err.message, true); }
+      $("send").disabled = false;
+    };
+    $("step2").onsubmit = async (e) => {
+      e.preventDefault(); $("verify").disabled = true; say("Checking…");
+      try { await post("/api/auth/verify", { email: $("email").value, code: $("code").value, name: $("name").value }); location.replace(safeNext); }
+      catch (err) { say(err.message, true); $("verify").disabled = false; }
+    };
+    $("again").onclick = () => { $("step2").classList.add("hidden"); $("step1").classList.remove("hidden"); say(""); };
+  </script>
+</body>
+</html>

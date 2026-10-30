@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Napkin Arcade</title>
+  <meta name="description" content="Draw a game on paper or type an idea. An AI studio of NVIDIA Nemotron agents designs it, models it in 3D, writes the code, playtests it with vision, and tunes it until it's fun.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><a class="logo" href="/" style="text-decoration:none">✏️🎮</a><div><h1>Napkin Arcade</h1><p>Draw a game or describe it. An AI studio builds it in 3D — and plays it until it's fun.</p></div></div>
+    <div class="userbar"><span id="who"></span><a href="#mine" class="ub">My games</a><a href="/" class="ub">Home</a><button id="logout" class="ub">Sign out</button></div>
+    <div class="meter"><span id="mode" class="badge">…</span><span class="label">This game</span><b id="cost">$0.000</b><span class="label">Total</span><b id="total">$0.00</b><span class="label" id="cap"></span></div>
+  </header>
+
+  <section id="create" class="create">
+    <div class="drop" id="drop">
+      <input type="file" id="file" accept="image/*" capture="environment" hidden>
+      <img id="preview" alt="" hidden>
+      <div id="dropText"><b>📷 Snap or drop a drawing</b><span>A napkin, notebook page or whiteboard sketch of your game</span></div>
+      <button id="clearImg" class="clear" hidden>✕ Remove drawing</button>
+    </div>
+    <div class="idea">
+      <label for="idea">…and/or describe it</label>
+      <textarea id="idea" rows="4" placeholder="A taxi racing through a crowded neon city at night, dodging traffic to deliver passengers."></textarea>
+      <button id="build" class="primary">Build my game</button>
+      <div class="samples">Try: <button data-sample="drawing">Cat vs Cucumbers (drawing)</button><button data-sample="text">Penguin pizza delivery (typed)</button><button data-sample="taxi">Neon taxi (typed)</button></div>
+      <p class="hint" id="hint"></p>
+    </div>
+  </section>
+
+  <section id="studio" class="studio hidden">
+    <div class="team" id="team"></div>
+    <div class="stage">
+      <div class="screen">
+        <div class="screenhead"><span id="screenLabel">Waiting for the first build…</span><span id="buildChip" class="chip"></span></div>
+        <div class="frame"><iframe id="screen" sandbox="allow-scripts" title="Game preview" allow="autoplay"></iframe></div>
+        <div id="thoughts" class="thoughts"></div>
+      </div>
+      <aside class="side">
+        <h2>Fun score by build</h2>
+        <div id="scores" class="scores"></div>
+        <h2>Bot playtests <span class="muted">(% of runs won)</span></h2>
+        <div id="levels" class="levels"></div>
+        <h2>Studio log</h2>
+        <div id="log" class="log"></div>
+      </aside>
+    </div>
+    <details class="code" id="codeBox" hidden><summary id="codeTitle">Game code</summary><div id="codeNotes" class="muted"></div><pre id="code"></pre></details>
+    <div id="final" class="final hidden"></div>
+  </section>
+
+  <section id="mine" class="studio"><h2>My games</h2><div id="myGames" class="mygames"><p class="muted">No games yet — draw or describe one above.</p></div></section>
+  <iframe id="lab" sandbox="allow-scripts" title="Test lab" hidden></iframe>
+  <footer>Built for the Nebius × NVIDIA Global AI Hackathon · NVIDIA Nemotron 3 Ultra, Super, Super VL and Nano on Nebius Token Factory · 3D by three.js</footer>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

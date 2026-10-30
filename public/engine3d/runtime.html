@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Napkin Arcade game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #07060d; color: #fff; font-family: Inter, system-ui, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+    #stage { position: absolute; inset: 0; }
+    #stage canvas { width: 100%; height: 100%; display: block; }
+    .hud { position: absolute; inset: 0; pointer-events: none; }
+    .top { position: absolute; top: 14px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .pill { background: rgba(10, 10, 20, .42); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 6px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+    #score { font: 26px "Russo One", sans-serif; letter-spacing: .02em; text-shadow: 0 0 18px rgba(255, 210, 63, .55); min-width: 70px; }
+    #score small { display: block; font: 700 10px Inter, sans-serif; letter-spacing: .14em; opacity: .7; text-shadow: none; }
+    #lives { font-size: 20px; letter-spacing: 2px; }
+    .bar { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); width: min(38%, 340px); height: 10px; border-radius: 99px; background: rgba(255,255,255,.14); overflow: hidden; border: 1px solid rgba(255,255,255,.18); }
+    .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3ef0ff, #ff2fa0); box-shadow: 0 0 14px #ff2fa0; transition: width .2s; }
+    #banner { position: absolute; top: 26%; left: 0; right: 0; text-align: center; opacity: 0; transform: scale(.85); transition: opacity .3s, transform .3s; }
+    #banner.show { opacity: 1; transform: scale(1); }
+    #banner b { display: block; font: clamp(28px, 6vw, 58px) "Russo One", sans-serif; text-shadow: 0 0 30px rgba(255, 47, 160, .7), 0 4px 0 rgba(0,0,0,.35); }
+    #banner span { font-weight: 700; font-size: clamp(13px, 2vw, 18px); opacity: .9; }
+    .pop { position: absolute; font: 22px "Russo One", sans-serif; transform: translate(-50%, -50%); animation: pop 0.9s ease-out forwards; text-shadow: 0 0 12px currentColor, 0 2px 0 rgba(0,0,0,.4); }
+    @keyframes pop { 0% { opacity: 0; margin-top: 0; transform: translate(-50%, -50%) scale(.6); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } 100% { opacity: 0; margin-top: -60px; transform: translate(-50%, -50%) scale(1); } }
+    .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; background: radial-gradient(ellipse at center, rgba(8,6,20,.55), rgba(8,6,20,.85)); pointer-events: auto; padding: 16px; }
+    .overlay.hidden { display: none; }
+    .card { max-width: 560px; }
+    .card h1 { font: clamp(30px, 7vw, 64px) "Russo One", sans-serif; margin: 0 0 6px; line-height: 1.02; background: linear-gradient(180deg, #fff, #ffd1ec 60%, #ff9ad5); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 22px rgba(255, 47, 160, .55)); }
+    .card p { margin: 0 0 16px; opacity: .88; font-size: clamp(14px, 2.2vw, 17px); }
+    .keys { display: inline-flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 18px; font-size: 13px; opacity: .85; }
+    .keys span { border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 3px 9px; }
+    .go { display: inline-block; font: 20px "Russo One", sans-serif; padding: 14px 34px; border-radius: 16px; background: linear-gradient(135deg, #ff2fa0, #ff8a3d); color: #fff; border: none; box-shadow: 0 10px 34px rgba(255, 47, 160, .45); cursor: pointer; animation: breathe 1.6s ease-in-out infinite; }
+    @keyframes breathe { 50% { transform: scale(1.05); } }
+    .stats { display: flex; gap: 10px; justify-content: center; margin: 4px 0 18px; flex-wrap: wrap; }
+    .stats div { background: rgba(255,255,255,.08); border-radius: 12px; padding: 8px 14px; min-width: 84px; }
+    .stats b { display: block; font: 22px "Russo One", sans-serif; }
+    .stats small { opacity: .7; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+    #thought { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: 80%; font-weight: 700; font-size: 15px; padding: 10px 16px; border-radius: 16px; background: rgba(255,255,255,.92); color: #1a1530; box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; transition: opacity .2s; }
+    #thought.show { opacity: 1; }
+    #thought em { font-style: normal; color: #ff2fa0; margin-right: 6px; }
+    #pause { position: absolute; top: 14px; right: 50%; margin-right: calc(-1 * min(19%, 170px) - 56px); width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: rgba(10,10,20,.45); color: #fff; font-size: 16px; cursor: pointer; pointer-events: auto; backdrop-filter: blur(10px); }
+    #mute { position: absolute; top: 14px; right: 50%; margin-right: calc(-1 * min(19%, 170px) - 104px); width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2); background: rgba(10,10,20,.45); color: #fff; font-size: 16px; cursor: pointer; pointer-events: auto; backdrop-filter: blur(10px); }
+    #iBest { color: #ffd23f; font-weight: 800; margin: -6px 0 14px; min-height: 22px; }
+    #tag { position: absolute; left: 16px; bottom: 14px; font-size: 12px; font-weight: 700; opacity: .75; }
+    #flashErr { position: absolute; left: 12px; right: 12px; bottom: 12px; color: #ff9aa8; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <div id="stage"></div>
+  <div class="hud" id="hud" hidden>
+    <div class="top"><div class="pill" id="score"><small>SCORE</small>0</div><div class="pill" id="lives"></div></div>
+    <div class="bar"><i id="prog"></i></div>
+    <div id="banner"><b></b><span></span></div>
+    <div id="pops"></div>
+    <div id="thought"></div>
+    <div id="tag"></div>
+    <button id="pause" title="Pause (P / Esc)">⏸</button>
+    <button id="mute" title="Sound on/off (M)">🔊</button>
+  </div>
+  <div class="overlay hidden" id="paused"><div class="card"><h1>PAUSED</h1><p>Press P, Esc or tap to continue</p></div></div>
+  <div class="overlay hidden" id="intro"><div class="card"><h1 id="iTitle"></h1><p id="iPitch"></p><div id="iBest"></div><div class="keys" id="iKeys"></div><br><button class="go" id="iGo">▶ PLAY</button></div></div>
+  <div class="overlay hidden" id="end"><div class="card"><h1 id="eTitle"></h1><p id="eSub"></p><div class="stats" id="eStats"></div><button class="go" id="eGo">↻ PLAY AGAIN</button></div></div>
+  <div id="flashErr"></div>
+  <script type="module" src="./host.js"></script>
+</body>
+</html>

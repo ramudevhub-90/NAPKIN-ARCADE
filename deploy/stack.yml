@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Napkin Arcade — one small ARM EC2 instance behind Caddy (HTTPS), its own Route 53 subdomain zone, SES email for sign-in codes.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: napkinarcade.revenuerush.in
+  InstanceType:
+    Type: String
+    Default: t4g.small
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+
+Resources:
+  DeployBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      LifecycleConfiguration: { Rules: [{ Id: expire-old-builds, Status: Enabled, ExpirationInDays: 30 }] }
+
+  WebSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Napkin Arcade web (HTTP/HTTPS only; admin access is via SSM, no SSH)
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0 }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIpv6: "::/0" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIpv6: "::/0" }
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ec2.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore]
+      Policies:
+        - PolicyName: napkin-arcade
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - { Effect: Allow, Action: [s3:GetObject], Resource: !Sub "${DeployBucket.Arn}/*" }
+              - { Effect: Allow, Action: [ssm:GetParameter], Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/napkin-arcade/*" }
+              - { Effect: Allow, Action: [ses:SendEmail], Resource: "*", Condition: { StringLike: { "ses:FromAddress": !Sub "*@${DomainName}" } } }
+              - { Effect: Allow, Action: [sts:AssumeRole], Resource: "arn:aws:iam::*:role/napkin-arcade-ses-sender" }
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref InstanceRole] }
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds: [!GetAtt WebSG.GroupId]
+      MetadataOptions: { HttpTokens: required }
+      BlockDeviceMappings: [{ DeviceName: /dev/xvda, Ebs: { VolumeSize: 16, VolumeType: gp3, Encrypted: true } }]
+      Tags: [{ Key: Name, Value: napkin-arcade }]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          # Node.js 22 (official ARM64 build) and Caddy for automatic HTTPS.
+          cd /tmp
+          curl -fsSLO https://nodejs.org/dist/v22.12.0/node-v22.12.0-linux-arm64.tar.xz
+          mkdir -p /opt/node && tar -xJf node-v22.12.0-linux-arm64.tar.xz -C /opt/node --strip-components=1
+          ln -sf /opt/node/bin/node /usr/local/bin/node && ln -sf /opt/node/bin/npm /usr/local/bin/npm
+          curl -fsSL -o caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_linux_arm64.tar.gz
+          tar -xzf caddy.tar.gz caddy && install -m 755 caddy /usr/local/bin/caddy
+          useradd --system --home /opt/napkin-arcade --shell /sbin/nologin napkin || true
+          mkdir -p /opt/napkin-arcade/data /etc/caddy /var/lib/caddy
+          chown -R napkin:napkin /opt/napkin-arcade
+          cat > /etc/caddy/Caddyfile <<'EOF'
+          ${DomainName} {
+            encode gzip
+            reverse_proxy 127.0.0.1:8790
+          }
+          EOF
+          cat > /etc/systemd/system/caddy.service <<'EOF'
+          [Unit]
+          Description=Caddy
+          After=network-online.target
+          [Service]
+          Environment=XDG_DATA_HOME=/var/lib/caddy
+          ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile
+          Restart=always
+          AmbientCapabilities=CAP_NET_BIND_SERVICE
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          cat > /etc/systemd/system/napkin-arcade.service <<'EOF'
+          [Unit]
+          Description=Napkin Arcade
+          After=network-online.target
+          [Service]
+          User=napkin
+          WorkingDirectory=/opt/napkin-arcade
+          EnvironmentFile=-/etc/napkin-arcade.env
+          Environment=PORT=8790 NODE_ENV=production
+          ExecStart=/usr/local/bin/node server/index.js
+          Restart=always
+          RestartSec=3
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          systemctl daemon-reload
+          systemctl enable --now caddy
+
+  IP:
+    Type: AWS::EC2::EIP
+    Properties: { InstanceId: !Ref Instance, Tags: [{ Key: Name, Value: napkin-arcade }] }
+
+  Zone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig: { Comment: Napkin Arcade (delegated from revenuerush.in) }
+
+  ARecord:
+    Type: AWS::Route53::RecordSet
+    Properties: { HostedZoneId: !Ref Zone, Name: !Ref DomainName, Type: A, TTL: "300", ResourceRecords: [!Ref IP] }
+
+  # SES: send sign-in codes from no-reply@<domain>, DKIM-signed.
+  EmailIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties: { EmailIdentity: !Ref DomainName }
+  Dkim1:
+    Type: AWS::Route53::RecordSet
+    Properties: { HostedZoneId: !Ref Zone, Name: !GetAtt EmailIdentity.DkimDNSTokenName1, Type: CNAME, TTL: "1800", ResourceRecords: [!GetAtt EmailIdentity.DkimDNSTokenValue1] }
+  Dkim2:
+    Type: AWS::Route53::RecordSet
+    Properties: { HostedZoneId: !Ref Zone, Name: !GetAtt EmailIdentity.DkimDNSTokenName2, Type: CNAME, TTL: "1800", ResourceRecords: [!GetAtt EmailIdentity.DkimDNSTokenValue2] }
+  Dkim3:
+    Type: AWS::Route53::RecordSet
+    Properties: { HostedZoneId: !Ref Zone, Name: !GetAtt EmailIdentity.DkimDNSTokenName3, Type: CNAME, TTL: "1800", ResourceRecords: [!GetAtt EmailIdentity.DkimDNSTokenValue3] }
+  Spf:
+    Type: AWS::Route53::RecordSet
+    Properties: { HostedZoneId: !Ref Zone, Name: !Ref DomainName, Type: TXT, TTL: "1800", ResourceRecords: ['"v=spf1 include:amazonses.com ~all"'] }
+  Dmarc:
+    Type: AWS::Route53::RecordSet
+    Properties: { HostedZoneId: !Ref Zone, Name: !Sub "_dmarc.${DomainName}", Type: TXT, TTL: "1800", ResourceRecords: ['"v=DMARC1; p=none"'] }
+
+Outputs:
+  Url: { Value: !Sub "https://${DomainName}" }
+  PublicIp: { Value: !Ref IP }
+  InstanceId: { Value: !Ref Instance }
+  Bucket: { Value: !Ref DeployBucket }
+  ZoneId: { Value: !Ref Zone }
+  NameServers: { Value: !Join [",", !GetAtt Zone.NameServers] }

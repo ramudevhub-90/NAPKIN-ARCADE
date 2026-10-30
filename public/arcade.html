@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Free Arcade · Napkin Arcade</title>
+  <meta name="description" content="Free 3D browser games with leaderboards and multiplayer rooms. No install, no sign-in.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #07060d; --card: #15132a; --ink: #f4f1ff; --muted: #a9a3c4; --line: rgba(255,255,255,.1); --pink: #ff2fa0; --orange: #ff8a3d; --cyan: #3ef0ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Inter, system-ui, sans-serif; }
+    a { color: inherit; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+    nav { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background: rgba(7,6,13,.7); border-bottom: 1px solid var(--line); }
+    nav .wrap { display: flex; align-items: center; gap: 18px; height: 62px; }
+    .logo { font: 20px "Russo One", sans-serif; text-decoration: none; }
+    nav .links { margin-left: auto; display: flex; gap: 18px; font-weight: 600; font-size: 14px; color: var(--muted); } nav .links a { text-decoration: none; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 15px "Russo One", sans-serif; text-decoration: none; color: #fff; border: 0; border-radius: 12px; padding: 10px 16px; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--orange)); box-shadow: 0 10px 28px rgba(255,47,160,.3); }
+    .btn.ghost { background: rgba(255,255,255,.08); box-shadow: none; border: 1px solid var(--line); font: 600 14px Inter, sans-serif; }
+    header { padding: 56px 0 24px; }
+    h1 { font: clamp(36px, 5vw, 60px)/1.05 "Russo One", sans-serif; margin: 0 0 10px; }
+    .sub { color: var(--muted); font-size: 18px; max-width: 680px; margin: 0; }
+    .feats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+    .feats span { font-size: 13px; border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px; color: #d8d3ee; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 18px; padding: 24px 0 64px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; }
+    .card:hover { transform: translateY(-4px); border-color: rgba(255,47,160,.45); }
+    .art { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+    .art iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+    .art .ph { position: absolute; inset: 0; display: grid; place-items: center; font-size: 64px; }
+    .art .genre { position: absolute; left: 12px; top: 12px; font: 600 12px Inter, sans-serif; background: rgba(7,6,13,.65); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; backdrop-filter: blur(8px); }
+    .body { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .body h3 { margin: 0; font: 22px "Russo One", sans-serif; }
+    .body p { margin: 0; color: var(--muted); font-size: 14.5px; flex: 1; }
+    .body .top { font-size: 13px; color: #ffd23f; min-height: 20px; }
+    .row { display: flex; gap: 8px; margin-top: 8px; }
+    h2 { font: 28px "Russo One", sans-serif; margin: 0 0 6px; }
+    .create { margin: 0 0 80px; background: linear-gradient(135deg, rgba(255,47,160,.16), rgba(62,240,255,.08)); border: 1px solid var(--line); border-radius: 22px; padding: 28px; display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+    footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; padding: 24px 0 40px; }
+    @media (max-width: 760px) { nav .links { display: none; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <nav><div class="wrap"><a class="logo" href="/">✏️🎮 Napkin Arcade</a><div class="links"><a href="/">Home</a><a href="/arcade">Arcade</a><a href="/#how">How it works</a></div><a class="btn" id="navCta" href="/login?next=/studio" style="margin-left:12px">✏️ Create a game</a></div></nav>
+  <header><div class="wrap">
+    <h1>The free arcade</h1>
+    <p class="sub">Polished 3D games you can play right now — on a laptop or a phone. No install, no sign-in.</p>
+    <div class="feats"><span>🏆 Global leaderboards</span><span>👥 Multiplayer rooms from a link</span><span>⚡ Power-ups &amp; combos</span><span>🎮 Keyboard + touch</span><span>⏸ Pause · 🔊 Sound · ⤢ Fullscreen</span></div>
+  </div></header>
+  <main class="wrap">
+    <div class="grid" id="games"></div>
+    <div id="community"></div>
+    <div class="create"><div><h2>Make your own</h2><p class="sub" style="font-size:16px">Draw it on a napkin or describe it — NVIDIA Nemotron agents build, playtest and ship it in minutes.</p></div><a class="btn" id="createCta" href="/login?next=/studio">✏️ Create a game</a></div>
+  </main>
+  <footer><div class="wrap">✏️🎮 Napkin Arcade · NVIDIA Nemotron on Nebius Token Factory · three.js</div></footer>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const GAMES = [
+      { id: "runner", title: "Neon Cab Rush", genre: "🚕 Racer", text: "Weave through midnight traffic, grab shields and coin magnets, and get your passenger home." },
+      { id: "flyer", title: "Ring Rider", genre: "🚀 Flyer", text: "Thread neon rings through an asteroid storm. Chain perfect streaks for huge multipliers." },
+      { id: "arena", title: "Star Pup Panic", genre: "🐶 Arena", text: "Collect every star in Candy Park. Grab a Sugar Rush gem and turn the tables on the ghosts." },
+      { id: "skier", title: "Frost Fall", genre: "⛷️ Slalom", text: "Carve down the mountain, nail the gates for combos and hop the logs before the avalanche." },
+      { id: "meteors", title: "Meteor Mayhem", genre: "☄️ Survival", text: "The sky is falling. Read the red rings, dash to safety and survive three waves." },
+      { id: "reef", title: "Reef Rush", genre: "🐠 Swimmer", text: "Swim a clownfish home through the reef — pearl chains, glowing jellies and a hungry shark." },
+    ];
+    // Live previews load as cards scroll into view (bots play them).
+    $("games").innerHTML = GAMES.map((g) => `<article class="card"><div class="art" data-preview="${g.id}"><span class="genre">${g.genre}</span></div>
+      <div class="body"><h3>${g.title}</h3><p>${g.text}</p><div class="top" id="top-${g.id}"></div>
+      <div class="row"><a class="btn" href="/play/example-${g.id}">▶ Play</a><a class="btn ghost" href="/play/example-${g.id}?friends=1">👥 Race friends</a></div></div></article>`).join("");
+    const io = new IntersectionObserver((es) => es.forEach((e) => {
+      if (!e.isIntersecting) return;
+      io.unobserve(e.target);
+      const f = document.createElement("iframe");
+      f.src = `/engine3d/runtime.html?example=${e.target.dataset.preview}&mode=view&quiet=1`; f.setAttribute("sandbox", "allow-scripts"); f.title = ""; f.tabIndex = -1;
+      e.target.prepend(f);
+    }), { rootMargin: "100px" });
+    document.querySelectorAll("[data-preview]").forEach((el) => io.observe(el));
+    for (const g of GAMES) fetch(`/api/scores?game=example-${g.id}`).then((r) => r.json()).then(({ top }) => { if (top?.[0]) $("top-" + g.id).textContent = `🏆 Top score: ${top[0].score} by ${top[0].name}`; }).catch(() => {});
+    fetch("/api/auth/me").then((r) => r.json()).then(({ user }) => { if (user) { $("navCta").href = $("createCta").href = "/studio"; } }).catch(() => {});
+    fetch("/api/gallery").then((r) => r.json()).then(({ games }) => {
+      if (!games?.length) return;
+      $("community").innerHTML = `<h2>Made by players with AI</h2><p class="sub" style="font-size:16px;margin-bottom:8px">Every one of these was designed, coded and playtested by Nemotron agents from someone's idea.</p><div class="grid">${games.map((g) => `<article class="card"><div class="body"><h3>${esc(g.title || "Untitled")}</h3><p>${esc(g.tagline)}</p><p style="flex:0">by ${esc(g.by)}${g.score != null ? ` · fun score ${g.score}` : ""}</p><div class="row"><a class="btn" href="/play/${g.id}">▶ Play</a><a class="btn ghost" href="/play/${g.id}?friends=1">👥 Race friends</a></div></div></article>`).join("")}</div>`;
+    }).catch(() => {});
+  </script>
+</body>
+</html>

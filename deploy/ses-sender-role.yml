@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lets the Napkin Arcade server (another account) send sign-in emails from this account's verified domain, and nothing else.
+
+Parameters:
+  ServerRoleArn:
+    Type: String
+    Description: ARN of the Napkin Arcade EC2 instance role in the hosting account
+  FromDomain:
+    Type: String
+    Default: revenuerush.in
+
+Resources:
+  SenderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: napkin-arcade-ses-sender
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { AWS: !Ref ServerRoleArn }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: send-sign-in-codes
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ses:SendEmail]
+                Resource: "*"
+                Condition: { StringLike: { "ses:FromAddress": !Sub "*@${FromDomain}" } }
+
+Outputs:
+  RoleArn: { Value: !GetAtt SenderRole.Arn }

@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Napkin Arcade</title>
+  <meta name="description" content="A 3D game designed, built and playtested by an AI studio of NVIDIA Nemotron agents. Play solo or race friends from a link.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --ink: #f4f1ff; --muted: #a9a3c4; --line: rgba(255,255,255,.14); --glass: rgba(14, 12, 28, .72); --pink: #ff2fa0; --orange: #ff8a3d; --cyan: #3ef0ff; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #07060d; overflow: hidden; color: var(--ink); font: 15px/1.45 Inter, system-ui, sans-serif; }
+    iframe#g { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+    .glass { background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.45); }
+    .btn { font: 15px "Russo One", sans-serif; color: #fff; border: 0; border-radius: 12px; padding: 11px 16px; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--orange)); box-shadow: 0 8px 24px rgba(255,47,160,.35); }
+    .btn.ghost { background: rgba(255,255,255,.08); box-shadow: none; border: 1px solid var(--line); font: 600 14px Inter, sans-serif; }
+    #friends { position: fixed; left: 16px; bottom: 16px; z-index: 5; }
+    #fs { position: fixed; left: 16px; bottom: 68px; z-index: 5; padding: 9px 13px; }
+    #lb { position: fixed; right: 16px; top: 70px; z-index: 6; width: 260px; padding: 12px 14px; max-height: calc(100vh - 120px); overflow: auto; }
+    #lb h3 { margin: 0 0 8px; font: 13px "Russo One", sans-serif; letter-spacing: .08em; color: var(--muted); }
+    #lb .r { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; font-weight: 600; font-size: 13.5px; padding: 4px 0; }
+    #lb .r span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #lb .r.me { color: #ffd23f; }
+    #lb input { margin: 10px 0 8px; padding: 9px; }
+    #home { position: fixed; right: 14px; bottom: 12px; font: 600 12px Inter, sans-serif; color: rgba(255,255,255,.7); text-decoration: none; z-index: 5; }
+    .overlay { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: rgba(7,6,13,.55); }
+    .hidden { display: none !important; }
+    .panel { width: min(520px, 100%); padding: 22px; max-height: calc(100vh - 32px); overflow: auto; }
+    .panel h2 { font: 24px "Russo One", sans-serif; margin: 0 0 4px; }
+    .muted { color: var(--muted); }
+    .share { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; margin: 14px 0; }
+    .link { font: 600 13px ui-monospace, monospace; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--cyan); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    #qr { float: right; margin: 0 0 8px 12px; } #qr svg { width: 108px; height: 108px; background: #fff; border-radius: 10px; padding: 4px; }
+    ul.players { list-style: none; padding: 0; margin: 12px 0 16px; display: grid; gap: 8px; clear: both; }
+    ul.players li { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.05); border-radius: 12px; padding: 10px 12px; font-weight: 600; }
+    ul.players li em { margin-left: auto; font-style: normal; color: var(--muted); font-weight: 500; font-size: 13px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+    input { width: 100%; font: inherit; color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 10px 0; outline: none; }
+    #board { position: fixed; right: 16px; top: 70px; z-index: 5; width: 240px; padding: 10px 12px; }
+    #board h3 { margin: 0 0 6px; font: 13px "Russo One", sans-serif; letter-spacing: .08em; color: var(--muted); }
+    #boardRows > div { display: grid; grid-template-columns: 16px 12px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-weight: 600; font-size: 13.5px; padding: 3px 0; }
+    #boardRows > div span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #board b { color: var(--muted); }
+    .podium { display: grid; gap: 8px; margin: 14px 0 18px; }
+    .podium div { display: grid; grid-template-columns: 34px 14px 1fr auto; gap: 10px; align-items: center; background: rgba(255,255,255,.05); border-radius: 12px; padding: 10px 12px; font-weight: 700; }
+    .podium div:first-child { background: linear-gradient(90deg, rgba(255,210,63,.25), rgba(255,255,255,.04)); }
+    .podium span.m { font-size: 22px; }
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 20; padding: 10px 16px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <iframe id="g" sandbox="allow-scripts" allow="autoplay; fullscreen" title="Game"></iframe>
+  <button id="friends" class="btn">👥 Play with friends</button>
+  <button id="fs" class="btn ghost" title="Fullscreen">⤢</button>
+  <div id="lb" class="glass hidden"><h3>🏆 LEADERBOARD</h3><div id="lbRows"></div><form id="lbName" class="hidden"><input id="lbInput" maxlength="18" placeholder="Your name for the board"><button class="btn" style="width:100%">Save my score</button></form><p class="muted" id="lbMsg" style="margin:6px 0 0;font-size:13px"></p></div>
+  <a id="home" href="/">✏️ Made with Napkin Arcade</a>
+
+  <div id="nameBox" class="overlay hidden"><form class="glass panel" id="nameForm">
+    <h2>Join the race</h2><p class="muted">What should the others call you?</p>
+    <input id="nameInput" maxlength="18" autocomplete="nickname" placeholder="Your name" required>
+    <button class="btn" style="width:100%">Join room</button>
+  </form></div>
+
+  <div id="lobby" class="overlay hidden"><div class="glass panel">
+    <div id="qr"></div>
+    <h2 id="lobbyTitle">Room</h2>
+    <p class="muted" id="lobbySub">Share this link. Friends who open it join this room.</p>
+    <div class="share"><div class="link" id="shareLink"></div><button class="btn ghost" id="copy">Copy</button></div>
+    <div class="row"><button class="btn ghost" id="nativeShare">↗ Share</button><button class="btn ghost" id="leave">Leave room</button></div>
+    <ul class="players" id="players"></ul>
+    <button class="btn" id="startBtn" style="width:100%">🏁 Start race</button>
+    <p class="muted" id="waitHost" style="text-align:center;margin:8px 0 0">Waiting for the host to start…</p>
+  </div></div>
+
+  <div id="results" class="overlay hidden"><div class="glass panel">
+    <h2>🏆 Results</h2>
+    <div class="podium" id="podium"></div>
+    <div class="row"><button class="btn" id="rematch">↻ Rematch</button><button class="btn ghost" id="toLobby">Back to lobby</button></div>
+    <p class="muted" id="waitRematch" style="margin:10px 0 0">The host can start a rematch.</p>
+  </div></div>
+
+  <div id="board" class="glass hidden"><h3>LIVE</h3><div id="boardRows"></div></div>
+  <div id="toast" class="glass toast hidden"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const id = location.pathname.split("/")[2] || "";
+    const params = new URLSearchParams(location.search);
+    let room = (params.get("room") || "").toUpperCase(), ws = null, me = null, roster = null, title = "", lastStates = [];
+    const g = $("g");
+    g.src = `/engine3d/runtime.html?id=${encodeURIComponent(id)}${room ? "&mp=1" : ""}${params.get("autoplay") === "1" ? "&autoplay=1" : ""}`;
+    g.addEventListener("load", () => g.focus());
+    const toGame = (msg) => g.contentWindow?.postMessage(msg, "*");
+    const toast = (t) => { $("toast").textContent = t; $("toast").classList.remove("hidden"); clearTimeout(toast.t); toast.t = setTimeout(() => $("toast").classList.add("hidden"), 2200); };
+    let user = null;
+    fetch("/api/auth/me").then((r) => r.json()).then((j) => { user = j.user; }).catch(() => {});
+
+    addEventListener("message", (e) => {
+      if (e.source !== g.contentWindow) return;
+      const d = e.data || {};
+      if (d.type === "loaded") { title = d.title; document.title = `${d.title} · Napkin Arcade`; if (room) enterRoom(); else if (params.get("friends") === "1") $("friends").click(); }
+      if (d.type === "game-start") $("lb").classList.add("hidden");
+      if (d.type === "mp-state") ws?.readyState === 1 && ws.send(JSON.stringify({ t: "state", s: d.s }));
+      if (d.type === "game-end") onGameEnd(d.result);
+      if (d.type === "mp-end") ws?.readyState === 1 && ws.send(JSON.stringify({ t: "end", result: d.result }));
+    });
+
+    // Personal best (this browser) and global leaderboard.
+    const bestKey = `na_best_${id}`;
+    const getBest = () => { try { return +localStorage.getItem(bestKey) || 0; } catch { return 0; } };
+    const playerName = () => user?.name || (() => { try { return localStorage.getItem("na_name"); } catch { return null; } })();
+    g.addEventListener("load", () => setTimeout(() => toGame({ cmd: "best", score: getBest() }), 600));
+    function renderBoard(top, meAt) {
+      $("lbRows").innerHTML = top.length ? top.map((r, i) => `<div class="r${i + 1 === meAt ? " me" : ""}"><b>${i + 1}</b><span>${esc(r.name)}</span><span>${r.score}</span></div>`).join("") : '<p class="muted" style="margin:0">No scores yet — be the first!</p>';
+    }
+    let pending = null;
+    async function submit(result, name) {
+      const r = await fetch("/api/scores?game=" + encodeURIComponent(id), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...result, name }) });
+      const j = await r.json();
+      if (!r.ok) return ($("lbMsg").textContent = j.error || "");
+      renderBoard(j.top, j.rank);
+      $("lbMsg").textContent = j.rank && j.rank <= 10 ? `You're #${j.rank} in the world! 🎉` : j.rank ? `Your rank: #${j.rank}` : "";
+    }
+    async function onGameEnd(result) {
+      if (result.score > getBest()) { try { localStorage.setItem(bestKey, result.score); } catch {} }
+      toGame({ cmd: "best", score: getBest() });
+      if (ws) return; // multiplayer shows its own podium
+      $("lb").classList.remove("hidden"); $("lbMsg").textContent = "";
+      const { top = [] } = await (await fetch("/api/scores?game=" + encodeURIComponent(id))).json();
+      renderBoard(top);
+      if (result.score <= 0) return;
+      const name = playerName();
+      if (name) return submit(result, name);
+      pending = result; $("lbName").classList.remove("hidden"); $("lbInput").focus();
+    }
+    $("lbName").onsubmit = (e) => { e.preventDefault(); const n = $("lbInput").value.trim(); if (!n || !pending) return; try { localStorage.setItem("na_name", n); } catch {} $("lbName").classList.add("hidden"); submit(pending, n); pending = null; };
+    $("fs").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
+
+    $("friends").onclick = async () => {
+      const r = await fetch("/api/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ game: id }) });
+      const j = await r.json();
+      if (!r.ok) return toast(j.error || "Could not create a room");
+      room = j.room;
+      history.replaceState(null, "", `${location.pathname}?room=${room}`);
+      toGame({ cmd: "mp-lobby" });
+      enterRoom();
+    };
+
+    function enterRoom() {
+      $("friends").classList.add("hidden"); $("lb").classList.add("hidden");
+      const saved = (() => { try { return localStorage.getItem("na_name"); } catch { return null; } })();
+      const name = user?.name || saved;
+      if (name) return connect(name);
+      $("nameBox").classList.remove("hidden"); $("nameInput").focus();
+    }
+    $("nameForm").onsubmit = (e) => { e.preventDefault(); const n = $("nameInput").value.trim(); try { localStorage.setItem("na_name", n); } catch {} $("nameBox").classList.add("hidden"); connect(n); };
+
+    function connect(name) {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      ws = new WebSocket(`${proto}://${location.host}/ws?room=${room}&game=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`);
+      ws.onmessage = (ev) => onRoom(JSON.parse(ev.data));
+      ws.onclose = () => { toast("Disconnected from the room"); $("lobby").classList.add("hidden"); $("board").classList.add("hidden"); $("friends").classList.remove("hidden"); ws = null; };
+      showLobby();
+    }
+
+    function shareUrl() { return `${location.origin}${location.pathname}?room=${room}`; }
+    function showLobby() {
+      $("lobby").classList.remove("hidden"); $("results").classList.add("hidden"); $("board").classList.add("hidden");
+      $("lobbyTitle").textContent = `Room ${room}${title ? " · " + title : ""}`;
+      $("shareLink").textContent = shareUrl();
+      if (window.qrcode) { const q = qrcode(0, "M"); q.addData(shareUrl()); q.make(); $("qr").innerHTML = q.createSvgTag({ cellSize: 3, margin: 2 }); }
+    }
+    $("copy").onclick = async () => { try { await navigator.clipboard.writeText(shareUrl()); toast("Link copied — send it to your friends!"); } catch { toast(shareUrl()); } };
+    $("nativeShare").onclick = async () => { if (navigator.share) { try { await navigator.share({ title: `Race me in ${title}`, url: shareUrl() }); } catch {} } else $("copy").onclick(); };
+    $("leave").onclick = () => { ws?.close(); history.replaceState(null, "", location.pathname); room = ""; };
+    $("startBtn").onclick = () => ws?.send(JSON.stringify({ t: "start" }));
+    $("rematch").onclick = () => ws?.send(JSON.stringify({ t: "start" }));
+    $("toLobby").onclick = () => { ws?.send(JSON.stringify({ t: "lobby" })); toGame({ cmd: "mp-lobby" }); showLobby(); };
+
+    function renderPlayers() {
+      if (!roster) return;
+      $("players").innerHTML = roster.players.map((p) => `<li><span class="dot" style="background:${p.color}"></span>${esc(p.name)}${p.id === me ? " (you)" : ""}<em>${p.id === roster.host ? "host" : "ready"}</em></li>`).join("");
+      const host = roster.host === me;
+      $("startBtn").classList.toggle("hidden", !host); $("waitHost").classList.toggle("hidden", host);
+      $("startBtn").textContent = roster.players.length < 2 ? "🏁 Start (solo until friends join)" : `🏁 Start race · ${roster.players.length} players`;
+      $("rematch").classList.toggle("hidden", !host); $("waitRematch").classList.toggle("hidden", host);
+    }
+
+    function onRoom(m) {
+      if (m.t === "welcome") me = m.you;
+      if (m.t === "room") { roster = m; renderPlayers(); }
+      if (m.t === "spectate") toast("A race is running — you'll join the next one.");
+      if (m.t === "start") {
+        $("lobby").classList.add("hidden"); $("results").classList.add("hidden"); $("board").classList.remove("hidden");
+        toGame({ cmd: "mp-start", seed: m.seed });
+      }
+      if (m.t === "states") {
+        lastStates = m.states;
+        toGame({ cmd: "mp-rivals", rivals: m.states.filter((s) => s.id !== me).map((s) => ({ id: s.id, name: s.name, color: s.color, ...s.s })) });
+        const ranked = [...m.states].sort((a, b) => (b.s.status === "won") - (a.s.status === "won") || b.s.progress - a.s.progress || b.s.score - a.s.score);
+        $("boardRows").innerHTML = ranked.map((s, i) => `<div><b>${i + 1}</b><span class="dot" style="background:${s.color}"></span><span>${esc(s.name)}${s.id === me ? " ★" : ""}</span><span>${s.s.status === "lost" ? "✖" : s.s.status === "won" ? "🏁" : Math.round(s.s.progress * 100) + "%"}</span></div>`).join("");
+      }
+      if (m.t === "results") {
+        $("board").classList.add("hidden"); $("results").classList.remove("hidden");
+        const medal = ["🥇", "🥈", "🥉"];
+        $("podium").innerHTML = m.ranking.map((r, i) => `<div><span class="m">${medal[i] || i + 1}</span><span class="dot" style="background:${r.color}"></span><span>${esc(r.name)}${r.id === me ? " (you)" : ""}</span><span class="muted">${r.won ? "finished" : Math.round(r.progress * 100) + "%"} · ${r.score} pts</span></div>`).join("");
+        renderPlayers();
+      }
+    }
+  </script>
+</body>
+</html>
