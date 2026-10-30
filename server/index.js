@@ -9,6 +9,7 @@ import { runStudio, runRevision } from "./studio3d.js";
 import { actMessages3d, PERSONAS, testerSummaryMessages } from "./prompts3d.js";
 import { startSession, logout, me, currentUser, chargeBuild, chargeRevision, cognitoConfig } from "./cognito.js";
 import { createRoom, handleUpgrade } from "./rooms.js";
+import { buildExport, exportSource, TARGETS } from "./exporter.js";
 import * as store from "../aws/lib/store.mjs";
 import { publishStudioEvent } from "../aws/lib/appsync.mjs";
 import { sendMail, circleInviteEmail, gameSharedEmail, groupInviteEmail, tournamentInviteEmail } from "../aws/lib/mail.mjs";
@@ -450,7 +451,37 @@ const server = http.createServer(async (req, res) => {
         const { ok, user } = await canPlay(req, meta);
         const group = meta.visibility === "group" ? await store.getGroup(meta.groupId) : null;
         if (!ok) return json(res, 403, { error: "This game is private.", private: true, by: meta.ownerName || "its creator", group: group ? group.name : null, signedIn: !!user, email: user?.email || null });
-        return json(res, 200, { ok: true, visibility: meta.visibility || "public", ticket: (meta.visibility || "public") !== "public" ? playTicket(id) : null });
+        const m = meta.monetize || {};
+        return json(res, 200, { ok: true, visibility: meta.visibility || "public", ticket: (meta.visibility || "public") !== "public" ? playTicket(id) : null, ads: m.adsenseClient ? { client: m.adsenseClient, test: m.adsenseTest !== false, every: m.every || 3 } : null });
+      }
+      // Publish everywhere: download a ready-to-ship package (owners only; showcase games for anyone signed in).
+      if (what === "export" && TARGETS.includes(parts[4])) {
+        const user = await currentUser(req);
+        if (!user) return json(res, 401, { error: "Please sign in." });
+        let meta = null;
+        if (!id.startsWith("example-")) { ({ meta } = await ownedGame(req, id)); }
+        const q = url.searchParams, monetize = meta?.monetize || {};
+        const src = await exportSource(id, store);
+        const out = buildExport(parts[4], src, {
+          appId: q.get("appId") || undefined,
+          ad: { ios: q.get("ios") || "", android: q.get("android") || "", web: q.get("web") || `${PUBLIC_URL()}/play/${id}`, cta: (q.get("cta") || "Play now").slice(0, 24), line: (q.get("line") || "").slice(0, 60), seconds: Math.max(10, Math.min(60, +q.get("seconds") || 30)) },
+          ads: { appAndroid: monetize.appAndroid, appIos: monetize.appIos, interstitialAndroid: monetize.interstitialAndroid, interstitialIos: monetize.interstitialIos, every: monetize.every || 3, test: monetize.test !== false },
+        });
+        res.writeHead(200, { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="${out.name}"`, "Content-Length": out.bytes.length, "Cache-Control": "no-store" });
+        return res.end(Buffer.from(out.bytes));
+      }
+      // Ads settings: Google H5 Games Ads on the web, AdMob in the mobile apps.
+      if (what === "monetize" && req.method === "POST") {
+        await ownedGame(req, id);
+        const b = await body(req, 3e3), str = (v, re) => (re.test(String(v || "").trim()) ? String(v).trim() : "");
+        const monetize = {
+          adsenseClient: str(b.adsenseClient, /^ca-pub-\d{10,20}$/), adsenseTest: b.adsenseTest !== false,
+          appAndroid: str(b.appAndroid, /^ca-app-pub-\d+~\d+$/), appIos: str(b.appIos, /^ca-app-pub-\d+~\d+$/),
+          interstitialAndroid: str(b.interstitialAndroid, /^ca-app-pub-\d+\/\d+$/), interstitialIos: str(b.interstitialIos, /^ca-app-pub-\d+\/\d+$/),
+          every: Math.max(1, Math.min(10, Math.round(+b.every || 3))), test: b.test !== false,
+        };
+        await store.updateGame(id, { monetize });
+        return json(res, 200, { monetize });
       }
       if (what === "visibility" && req.method === "POST") {
         const { user, meta } = await ownedGame(req, id);
@@ -470,7 +501,7 @@ const server = http.createServer(async (req, res) => {
       if (what === "workshop") {
         const { meta, game } = await ownedGame(req, id);
         const [versions, chatLog, fb] = await Promise.all([store.versions(id), store.chat(id), store.feedback(id)]);
-        return json(res, 200, { id, visibility: meta.visibility || "public", groupId: meta.groupId || null, title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto })), busy: !!(p && !p.done) });
+        return json(res, 200, { id, visibility: meta.visibility || "public", groupId: meta.groupId || null, monetize: meta.monetize || {}, title: meta.title || game.design?.title, tagline: meta.tagline || game.design?.tagline, design: game.design, version: meta.version, liveVersion: store.liveVersionOf(meta), versions: versions.map(({ v, summary, at, score }) => ({ v, summary, at, score })), changelog: meta.changelog || [], chat: chatLog.map(({ role, text, version, at }) => ({ role, text, version, at })), feedback: fb.map(({ id, text, name, status, at, kind, reports, auto }) => ({ id, text, name, status, at, kind: kind || "idea", reports: reports || 1, auto: !!auto })), busy: !!(p && !p.done) });
       }
       if (what === "chat" && req.method === "POST") {
         const { user, meta, game } = await ownedGame(req, id);
@@ -602,9 +633,24 @@ const server = http.createServer(async (req, res) => {
       return page("studio.html");
     }
     // Play pages: /play/<id>
-    if (parts[0] === "play" && parts[1]) {
-      res.writeHead(200, { "Content-Type": MIME[".html"] });
-      return fs.createReadStream(path.join(PUBLIC, "play3d.html")).pipe(res);
+    // Play pages: /play/<id> (rich link previews + an installable app per game), /play/<id>/manifest.webmanifest
+    if (parts[0] === "play" && /^[a-z0-9-]+$/.test(parts[1] || "")) {
+      const gid = parts[1], ex = /^example-([a-z]+)$/.exec(gid);
+      const meta = ex ? null : await store.getGame(gid).catch(() => null);
+      const pub = !meta || (meta.visibility || "public") === "public"; // private games don't leak titles into previews
+      const title = ex ? EXAMPLE_TITLES[ex[1]] || "Napkin Arcade" : pub && meta?.title ? meta.title : "Napkin Arcade";
+      const tagline = pub && meta?.tagline ? meta.tagline : "Play it in your browser, with friends, on any device.";
+      if (parts[2] === "manifest.webmanifest") {
+        res.writeHead(200, { "Content-Type": "application/manifest+json", "Cache-Control": "no-cache" });
+        return res.end(JSON.stringify({ name: title, short_name: title.slice(0, 12), description: tagline, id: `/play/${gid}`, start_url: `/play/${gid}`, scope: `/play/${gid}`, display: "fullscreen", orientation: "landscape", background_color: "#07060d", theme_color: "#07060d", categories: ["games"], icons: [{ src: "/logo-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }, { src: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }] }));
+      }
+      const e = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+      const html = fs.readFileSync(path.join(PUBLIC, "play3d.html"), "utf8")
+        .replace('<meta property="og:title" content="Play on Napkin Arcade">', `<meta property="og:title" content="${e(title)} · Napkin Arcade">`)
+        .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${e(tagline)}">`)
+        .replace('<link rel="icon"', `<link rel="manifest" href="/play/${gid}/manifest.webmanifest"><meta name="theme-color" content="#07060d"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="icon"`);
+      res.writeHead(200, { "Content-Type": MIME[".html"], "Cache-Control": "no-cache" });
+      return res.end(html);
     }
     const file = path.normalize(path.join(PUBLIC, url.pathname === "/" ? "index.html" : url.pathname));
     if (!file.startsWith(PUBLIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return json(res, 404, { error: "not found" });

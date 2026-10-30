@@ -42,11 +42,15 @@ const sfx = new Sfx();
 let userPaused = false, best = 0;
 const quiet = params.get("quiet") === "1";
 const autoplay = params.get("autoplay") === "1";
+// Device profile: TVs, sticks and low-memory devices get the light renderer (?quality=0.4..1 overrides).
+const TV = /SMART-TV|SmartTV|Tizen|Web0S|webOS|NetCast|BRAVIA|AFT[A-Z]|Android TV|GoogleTV|CrKey|Xbox|PlayStation/i.test(navigator.userAgent);
+const QUALITY = params.has("quality") ? Math.max(0.4, Math.min(1, +params.get("quality") || 1)) : TV || (navigator.deviceMemory || 8) <= 2 || (navigator.hardwareConcurrency || 8) <= 2 ? 0.6 : 1;
+if (TV) document.documentElement.classList.add("tv");
 let mp = null; // { seed, sendTimer, ended }
 let mod = null, payload = null, rt = null, mode = "idle", paused = false, botMem = {}, agentInput = null, viewRestart = null;
 
 async function compile(p) {
-  if (p.example) return import(`./examples/${p.example}.js`);
+  if (p.example) { const src = new URL(`./examples/${p.example}.js`, import.meta.url).href; return import(src); } // not bundled into offline exports
   const url = URL.createObjectURL(new Blob([p.code], { type: "text/javascript" }));
   try { return await import(url); } finally { URL.revokeObjectURL(url); }
 }
@@ -82,7 +86,7 @@ const ui = {
       const newBest = st.score > best;
       if (newBest) best = st.score;
       $("eStats").innerHTML = [["Score", st.score], ["Best", best], ["Time", st.time.toFixed(1) + "s"], ["Progress", Math.round(st.progress * 100) + "%"]].map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join("") + (newBest && st.score > 0 ? '<div style="flex-basis:100%;background:none;color:#ffd23f;font-weight:800">★ NEW PERSONAL BEST ★</div>' : "");
-      $("end").classList.remove("hidden");
+      $("end").classList.remove("hidden"); $("eGo").focus({ preventScroll: true });
     }, 900);
   },
 };
@@ -97,7 +101,8 @@ addEventListener("keydown", (e) => {
   if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); e.preventDefault(); }
   if (e.code === "KeyR" && mode === "play") again();
   if (e.code === "KeyM") { sfx.muted = !sfx.muted; $("mute").textContent = sfx.muted ? "🔇" : "🔊"; }
-  if ((e.code === "KeyP" || e.code === "Escape") && mode !== "agent") togglePause();
+  if ((e.code === "KeyP" || e.code === "Escape" || BACK_KEYS.has(e.key) || BACK_CODES.has(e.keyCode)) && mode !== "agent") { e.preventDefault(); togglePause(); }
+  if (!$("paused").classList.contains("hidden") && (e.code === "ArrowUp" || e.code === "ArrowDown")) { e.preventDefault(); moveMenuFocus(e.code === "ArrowDown" ? 1 : -1); }
 });
 addEventListener("keyup", (e) => keys.delete(KEYMAP[e.code]));
 let touch = null, joy = { x: 0, y: 0 };
@@ -117,8 +122,49 @@ stageEl.addEventListener("pointermove", (e) => {
 const endTouch = () => { if (touch && !touch.swiped && performance.now() - touch.t < 300) { pulse.a = 1; pulse.fa = 5; } touch = null; joy.x = joy.y = 0; };
 stageEl.addEventListener("pointerup", endTouch); stageEl.addEventListener("pointercancel", endTouch);
 
+// TV remotes: Back opens the pause menu (Samsung Tizen 10009, LG webOS 461, Android TV "GoBack").
+const BACK_KEYS = new Set(["GoBack", "BrowserBack", "Back"]), BACK_CODES = new Set([10009, 461]);
+try { window.tizen?.tvinputdevice?.registerKeyBatch(["MediaPlayPause", "MediaPlay", "MediaPause"]); } catch {}
+addEventListener("keydown", (e) => { if (/^Media(PlayPause|Play|Pause)$/.test(e.key) && mode === "play") togglePause(); });
+// Remote / controller menu navigation: move focus between the visible menu buttons.
+function menuButtons() { const o = ["paused", "end", "intro"].map($).find((x) => !x.classList.contains("hidden")); return o ? [...o.querySelectorAll("button:not([hidden])")] : []; }
+function moveMenuFocus(dir) { const b = menuButtons(); if (!b.length) return; const i = b.indexOf(document.activeElement); b[(i + dir + b.length) % b.length].focus(); }
+function menuConfirm() {
+  if (document.activeElement?.tagName === "BUTTON" && menuButtons().includes(document.activeElement)) return document.activeElement.click();
+  if (!$("intro").classList.contains("hidden")) return begin();
+  if (!$("end").classList.contains("hidden")) return again();
+  if (userPaused) togglePause(false);
+}
+
+// Game controllers (Xbox, PlayStation, Switch Pro, TV gamepads) via the Gamepad API, standard mapping:
+// stick or D-pad moves, A / RB / RT is the action, Start pauses, B resumes; in menus A confirms.
+const pad = { x: 0, y: 0, a: false, prev: {} };
+function pollPads() {
+  pad.x = pad.y = 0; pad.a = false;
+  const pads = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : [];
+  if (!pads.length) return;
+  const now = {};
+  for (const gp of pads) {
+    const b = (i) => !!gp.buttons[i]?.pressed, dz = (v) => (Math.abs(v || 0) > 0.3 ? v : 0);
+    pad.x += dz(gp.axes[0]) + (b(15) ? 1 : 0) - (b(14) ? 1 : 0);
+    pad.y += -dz(gp.axes[1]) + (b(12) ? 1 : 0) - (b(13) ? 1 : 0);
+    pad.a ||= b(0) || b(5) || b(7);
+    now.a ||= b(0); now.b ||= b(1); now.start ||= b(9) || b(8); now.up ||= b(12) || gp.axes[1] < -0.6; now.down ||= b(13) || gp.axes[1] > 0.6;
+  }
+  pad.x = Math.max(-1, Math.min(1, pad.x)); pad.y = Math.max(-1, Math.min(1, pad.y));
+  const pressed = (k) => now[k] && !pad.prev[k];
+  const inMenu = menuButtons().length > 0;
+  if (pressed("start") && mode !== "agent") togglePause();
+  if (inMenu && pressed("a")) { sfx.unlock(); menuConfirm(); }
+  if (inMenu && (pressed("up") || pressed("down"))) moveMenuFocus(pressed("down") ? 1 : -1);
+  if (pressed("b") && userPaused) togglePause(false);
+  pad.prev = now;
+}
+addEventListener("gamepadconnected", () => { document.documentElement.classList.add("pad"); });
+
 function humanInput() {
-  let x = (keys.has("r") ? 1 : 0) - (keys.has("l") ? 1 : 0) + joy.x, y = (keys.has("u") ? 1 : 0) - (keys.has("d") ? 1 : 0) + joy.y, action = keys.has("a");
+  let x = (keys.has("r") ? 1 : 0) - (keys.has("l") ? 1 : 0) + joy.x + pad.x, y = (keys.has("u") ? 1 : 0) - (keys.has("d") ? 1 : 0) + joy.y + pad.y, action = keys.has("a") || pad.a;
+  x = Math.max(-1, Math.min(1, x)); y = Math.max(-1, Math.min(1, y));
   if (pulse.fx > 0) { x = pulse.x; pulse.fx--; } if (pulse.fy > 0) { y = pulse.y; pulse.fy--; } if (pulse.fa > 0) { action = true; pulse.fa--; }
   return { x, y, action };
 }
@@ -136,6 +182,7 @@ function togglePause(force) {
     $("mRestart").hidden = mode !== "play";
     $("mQuit").textContent = mp ? "🚪 Leave race" : "⏹ Quit to title";
     $("mQuit").hidden = mode !== "play";
+    $("mResume").focus({ preventScroll: true });
   }
 }
 $("pause").onclick = (e) => { e.stopPropagation(); togglePause(); };
@@ -156,6 +203,7 @@ $("eTitleBtn").onclick = () => { $("end").classList.add("hidden"); showIntro(); 
 let last = performance.now(), acc = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  pollPads();
   if (!rt) return;
   if (paused || userPaused || document.hidden) { last = now; return; }
   acc += Math.min(0.1, (now - last) / 1000); last = now;
@@ -183,7 +231,7 @@ function start(m, seed) {
   rt?.dispose();
   stageEl.innerHTML = "";
   const canvas = document.createElement("canvas"); stageEl.appendChild(canvas);
-  rt = createRuntime({ canvas, game: mod, models: payload.models, tuning: payload.tuning, seed: seed ?? (m === "play" ? (Math.random() * 1e9) | 0 : 7), ui, sfx, mp: m === "play" && mp ? { slot: mp.slot, players: mp.players } : null });
+  rt = createRuntime({ canvas, game: mod, models: payload.models, tuning: payload.tuning, seed: seed ?? (m === "play" ? (Math.random() * 1e9) | 0 : 7), ui, sfx, quality: QUALITY, mp: m === "play" && mp ? { slot: mp.slot, players: mp.players } : null });
   $("hud").hidden = quiet; ui.score(0); ui.lives(rt.state.lives); ui.progress(0);
   if (quiet) sfx.muted = true;
   $("tag").textContent = m === "view" && !quiet ? "🤖 Bot is playing — preview" : "";
@@ -200,7 +248,7 @@ function showIntro() {
   $("iKeys").innerHTML = [ctl, M.action !== "none" ? `Space: ${M.action}` : "", "Touch: swipe / drag, tap"].filter(Boolean).map((k) => `<span>${k}</span>`).join("");
   start("view");
   $("tag").textContent = "";
-  $("intro").classList.remove("hidden");
+  $("intro").classList.remove("hidden"); $("iGo").focus({ preventScroll: true });
 }
 function begin() { sfx.unlock(); sfx.play("click"); start("play"); parent.postMessage({ type: "game-start" }, "*"); }
 function again() { sfx.play("click"); start("play"); parent.postMessage({ type: "game-start" }, "*"); }
@@ -282,20 +330,35 @@ addEventListener("message", async (ev) => {
       case "mp-rivals": return rt?.setRivals(m.rivals || []);
       // Keys pressed while the outer page has focus (e.g. right after clicking Start race).
       case "key": if (KEYMAP[m.code]) m.down ? keys.add(KEYMAP[m.code]) : keys.delete(KEYMAP[m.code]); if (m.down && (m.code === "KeyP" || m.code === "Escape")) togglePause(); return;
+      case "freeze": paused = true; sfx.muted = true; return; // a playable ad's end card is up
+      case "mute": sfx.muted = !!m.on; $("mute").textContent = sfx.muted ? "🔇" : "🔊"; return; // during ad breaks
       case "best": best = Math.max(best, +m.score || 0); $("iBest").textContent = best ? `Your best: ${best}` : ""; return;
     }
   } catch (e) { reply({ type: "error", error: String(e?.message || e) }); }
 });
 
+// ---------- exported builds (HTML5 zip, playable ads, apps, TVs): the game is in the page ----------
+const EXPORTED = window.NAPKIN_GAME || null;
+if (EXPORTED) {
+  try { best = +localStorage.getItem("napkin_best") || 0; } catch {}
+  // Re-broadcast game events as DOM events for the wrappers (ad end card, app ads, local best).
+  addEventListener("message", (e) => {
+    const d = e.source === window ? e.data || {} : {};
+    if (d.type === "game-end" && d.result.score > best) { best = d.result.score; try { localStorage.setItem("napkin_best", best); } catch {} $("iBest").textContent = `Your best: ${best}`; }
+    if (d.type === "game-start" || d.type === "game-end") dispatchEvent(new CustomEvent(`napkin:${d.type}`, { detail: d.result || null }));
+  });
+}
+
 // ---------- standalone play page ----------
 (async () => {
   const id = params.get("id"), example = params.get("example");
-  if (!id && !example) return parent.postMessage({ type: "ready" }, "*");
+  if (!id && !example && !EXPORTED) return parent.postMessage({ type: "ready" }, "*");
   try {
     const ex = example || (id?.startsWith("example-") ? id.slice(8) : null);
-    payload = ex ? { example: ex } : await (await fetch(`../api/projects/${id}/game3d${params.get("t") ? `?t=${encodeURIComponent(params.get("t"))}` : ""}`)).json();
+    payload = EXPORTED ? EXPORTED : ex ? { example: ex } : await (await fetch(`../api/projects/${id}/game3d${params.get("t") ? `?t=${encodeURIComponent(params.get("t"))}` : ""}`)).json();
     if (payload.error) throw new Error(payload.error);
     mod = await compile(payload);
+    if (EXPORTED) { $("iBest").textContent = best ? `Your best: ${best}` : ""; dispatchEvent(new CustomEvent("napkin:ready")); }
     if (params.get("mode") === "view" || params.get("mp") === "1") start("view");
     else if (autoplay) { sfx.muted = true; start("play"); }
     else showIntro();

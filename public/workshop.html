@@ -41,6 +41,18 @@
     .vbtns { display: flex; gap: 4px; }
     .pill.live { background: rgba(57,255,136,.15); color: var(--green); border: 1px solid rgba(57,255,136,.5); } .pill.draft { background: rgba(255,210,63,.12); color: var(--amber); border: 1px solid rgba(255,210,63,.45); }
     .err { color: var(--red); font-size: 13px; }
+    .pubgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+    .pub { display: block; cursor: pointer; text-decoration: none; color: var(--ink); border: 1px solid var(--line); background: rgba(255,255,255,.04); border-radius: 14px; padding: 12px 14px; transition: border-color .2s, transform .15s, box-shadow .2s; }
+    .pub:hover { transform: translateY(-2px); border-color: rgba(255,47,160,.5); box-shadow: 0 0 22px rgba(255,47,160,.15); }
+    .pub b { display: block; font-size: 14px; } .pub span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .pub.busy { opacity: .6; pointer-events: none; }
+    .subform { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.03); }
+    .subform[hidden] { display: none; }
+    .subform label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); } .subform .check { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; } .subform .check input { width: auto; }
+    .subform input, .subform select { padding: 9px 11px; border-radius: 10px; font-size: 13.5px; }
+    .subform button, .subform p { grid-column: 1 / -1; }
+    .embedrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+    .embedrow code { font: 12px ui-monospace, Menlo, monospace; color: var(--blue); background: rgba(62,240,255,.06); border: 1px solid rgba(62,240,255,.22); border-radius: 10px; padding: 9px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .share { display: grid; gap: 8px; }
     #circleEmail { border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 10px; font: inherit; min-width: 0; }
     .opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
@@ -81,6 +93,41 @@
         </div>
         <p class="muted" id="shareNote" style="margin:8px 0 0;font-size:13px"></p>
         <p class="err" id="shareErr"></p>
+      </div>
+      <div class="card" style="margin-top:16px" id="publish">
+        <h2 style="margin-top:0">🚀 Publish everywhere</h2>
+        <p class="muted" style="margin:-4px 0 12px;font-size:13px">Every package is the <b>live</b> version, fully offline, with touch, keyboard, game controllers and TV remotes.</p>
+        <div class="pubgrid">
+          <a class="pub" data-export="html5"><b>🌐 HTML5 game</b><span>itch.io, Poki, CrazyGames, or inside any app's WebView</span></a>
+          <a class="pub" data-export="mobile"><b>📱 iOS · Android · Android TV · Fire TV</b><span>App project with cloud builds (GitHub Actions) → .ipa / .aab / .apk</span></a>
+          <a class="pub" data-export="desktop"><b>🖥 Windows · macOS · Linux</b><span>Desktop app for Steam, Steam Deck and itch.io</span></a>
+          <a class="pub" data-export="tizen"><b>📺 Samsung Smart TV</b><span>Tizen web app for the Samsung TV store</span></a>
+          <a class="pub" data-export="webos"><b>📺 LG Smart TV</b><span>webOS app for the LG Content Store</span></a>
+          <a class="pub" id="pubAdsToggle"><b>🎯 Playable ads</b><span>AppLovin, Unity, ironSource, Mintegral, Meta, Google Ads</span></a>
+        </div>
+        <form class="subform" id="adForm" hidden>
+          <label>App Store link<input id="adIos" type="url" placeholder="https://apps.apple.com/app/id…"></label>
+          <label>Google Play link<input id="adAndroid" type="url" placeholder="https://play.google.com/store/apps/details?id=…"></label>
+          <label>Button text<input id="adCta" maxlength="24" value="Play now"></label>
+          <label>Play time (seconds)<input id="adSeconds" type="number" min="10" max="60" value="30"></label>
+          <button class="btn primary">⬇ Download playable ads</button>
+          <p class="muted" style="margin:0;font-size:12px">No store yet? Leave the links empty — the button opens this game's web page.</p>
+        </form>
+        <h2>Share & embed</h2>
+        <div class="embedrow"><code id="embedCode"></code><button class="btn" id="copyEmbed" type="button">Copy embed</button></div>
+        <p class="muted" style="margin:8px 0 0;font-size:12.5px">The game link opens in any browser, phone or TV. Players can <b>install it</b> from the browser menu (Add to Home Screen) and replay it offline. Microsoft Store / Xbox: package the link with <a id="pwaBuilder" target="_blank" rel="noopener">PWABuilder</a>.</p>
+        <h2>💰 Ads</h2>
+        <form class="subform" id="monForm">
+          <label>Web · AdSense client (H5 Games Ads)<input id="mAdsense" placeholder="ca-pub-0000000000000000"></label>
+          <label>App · AdMob app id (Android)<input id="mAppAndroid" placeholder="ca-app-pub-…~…"></label>
+          <label>App · AdMob app id (iOS)<input id="mAppIos" placeholder="ca-app-pub-…~…"></label>
+          <label>Interstitial unit (Android)<input id="mIntAndroid" placeholder="ca-app-pub-…/…"></label>
+          <label>Interstitial unit (iOS)<input id="mIntIos" placeholder="ca-app-pub-…/…"></label>
+          <label>Ad after every<select id="mEvery"><option value="2">2 games</option><option value="3" selected>3 games</option><option value="5">5 games</option></select></label>
+          <label class="check"><input type="checkbox" id="mTest" checked> Test ads (turn off once your accounts are approved)</label>
+          <button class="btn primary">Save ad settings</button>
+          <p class="muted" id="monNote" style="margin:0;font-size:12px">Web ads show between runs on this game's page; app ads are built into the mobile export. Revenue goes to your own Google accounts.</p>
+        </form>
       </div>
       <div class="card" style="margin-top:16px">
         <h2 style="margin-top:0">Versions</h2>

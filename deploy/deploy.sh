@@ -29,6 +29,9 @@ ENV_BODY=$({ grep -E '^(NEBIUS_API_KEY|NEBIUS_BASE_URL|MODEL_[A-Z]+|HARD_CAP_USD
   else echo "MAIL_FROM=Napkin Arcade <no-reply@$DOMAIN>"; fi; })
 aws ssm put-parameter --name /napkin-arcade/env --type SecureString --overwrite --value "$ENV_BODY" >/dev/null
 
+echo "▶ Building the offline player (for exports)…"
+npm run --silent build:player
+
 echo "▶ Bundling and uploading the app…"
 VER=$(date +%Y%m%d%H%M%S)
 TMP=$(mktemp -d)

@@ -9,3 +9,4 @@ public/media/
 infra/node_modules/
 infra/cdk.out/
 aws/outputs.json
+server/build/

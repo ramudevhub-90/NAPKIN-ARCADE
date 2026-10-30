@@ -35,11 +35,14 @@ export function createRuntime({ canvas = null, game, models = [], tuning = {}, s
     renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75) * quality);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
+    // Weak GPUs (TVs, streaming sticks, older phones) run with quality < 0.8: no shadows, MSAA or bloom.
+    const lite = quality < 0.8;
+    renderer.shadowMap.enabled = !lite; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: lite ? 0 : 4 });
     composer = new EffectComposer(renderer, rt);
     composer.addPass(new RenderPass(scene, camera));
     bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.5, 0.85);
+    bloom.enabled = !lite;
     composer.addPass(bloom);
     finish = new ShaderPass(FinishShader); composer.addPass(finish);
     composer.addPass(new OutputPass());

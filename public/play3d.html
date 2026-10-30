@@ -25,6 +25,7 @@
     #tourBar { position: fixed; left: 50%; top: 52px; transform: translateX(-50%); z-index: 7; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; font: 600 13px Inter, sans-serif; text-decoration: none; color: var(--ink); max-width: calc(100vw - 32px); }
     #tourBar b { font: 13px "Russo One", sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #tourBar .pill { padding: 3px 9px; border-radius: 99px; background: rgba(255,47,160,.2); border: 1px solid rgba(255,47,160,.55); font-size: 12px; white-space: nowrap; }
     #tourBar .cta { background: linear-gradient(135deg, var(--pink), var(--orange)); color: #fff; border-radius: 99px; padding: 4px 11px; font-size: 12px; white-space: nowrap; }
+    .embed #friends, .embed #fbBtn { display: none !important; }
     #tools { position: fixed; left: 16px; bottom: 68px; z-index: 5; display: flex; gap: 8px; }
     #tools .btn { padding: 9px 13px; }
     #lb { position: fixed; right: 16px; top: 70px; z-index: 6; width: 300px; padding: 12px 14px; max-height: calc(100vh - 120px); overflow: auto; }
@@ -134,10 +135,14 @@
     const g = $("g");
     const frameSrc = (t) => `/engine3d/runtime.html?id=${encodeURIComponent(id)}${room ? "&mp=1" : ""}${params.get("autoplay") === "1" ? "&autoplay=1" : ""}${t ? `&t=${encodeURIComponent(t)}` : ""}`;
     // Circle-only games: check access first (the game frame then gets a ticket to load it).
+    // Installable per game (PWA) and playable offline once loaded.
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    // Embedded on other sites (?embed=1): just the game, no social buttons.
+    if (params.get("embed") === "1") document.documentElement.classList.add("embed");
     if (id.startsWith("example-")) g.src = frameSrc();
     else fetch(`/api/projects/${encodeURIComponent(id)}/access`).then(async (r) => {
       const j = await r.json().catch(() => ({}));
-      if (r.ok) return (g.src = frameSrc(j.ticket));
+      if (r.ok) { if (j.ads) webAds(j.ads); return (g.src = frameSrc(j.ticket)); }
       $("lockTitle").textContent = j.private ? "🔒 Private game" : "Game not found";
       const who = j.group ? `members of the “${j.group}” group` : `${j.by}'s circle`;
       $("lockText").textContent = !j.private ? "This game doesn't exist or isn't ready yet." : j.signedIn ? `This game is only for ${who}, and ${j.email} isn't in it yet. ${j.group ? "Ask a member for the group's join link." : "Ask them to add you, or sign in with the email they invited."}` : `This game is only for ${who}. Sign in to play${j.group ? " — or ask a member for the group's join link" : " with the email they invited"}.`;
@@ -248,7 +253,22 @@
       toast(j.improved ? `🏆 New best in ${j.name}: ${j.you.best.score}${j.you.rank ? ` — you're #${j.you.rank}` : ""}!` : `🏆 ${j.name}: your best is still ${j.you.best.score}${j.you.rank ? ` (#${j.you.rank})` : ""}`);
     }
 
+    // Creator-enabled web ads: Google H5 Games Ads (Ad Placement API), an ad break between runs.
+    let adBreak = null, runs = 0;
+    function webAds(a) {
+      const sc = document.createElement("script");
+      sc.async = true; sc.crossOrigin = "anonymous";
+      sc.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(a.client)}`;
+      sc.dataset.adClient = a.client; if (a.test) sc.dataset.adbreakTest = "on";
+      document.head.appendChild(sc);
+      window.adsbygoogle = window.adsbygoogle || [];
+      adBreak = (o) => window.adsbygoogle.push(o);
+      adBreak({ preloadAdBreaks: "on", sound: "on" }); // adConfig
+      adBreak.every = a.every || 3;
+    }
+
     async function onGameEnd(result) {
+      if (adBreak && ++runs % adBreak.every === 0) adBreak({ type: "next", name: "game-over", beforeAd: () => toGame({ cmd: "mute", on: true }), afterAd: () => toGame({ cmd: "mute", on: false }) });
       if (!ws) submitTour(result);
       if (result.score > getBest()) { try { localStorage.setItem(bestKey, result.score); } catch {} }
       toGame({ cmd: "best", score: getBest() });

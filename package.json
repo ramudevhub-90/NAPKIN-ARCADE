@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test test/*.test.mjs",
-    "deploy": "deploy/deploy.sh"
+    "deploy": "deploy/deploy.sh",
+    "build:player": "node scripts/build-player.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -28,11 +29,16 @@
     "acorn": "^8.14.0",
     "acorn-walk": "^8.3.4",
     "aws-jwt-verify": "^4.0.1",
+    "fflate": "^0.8.2",
     "nodemailer": "^6.9.16",
     "ws": "^8.18.0"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/ramudevhub-90/NAPKIN-ARCADE"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "three": "0.170.0"
   }
 }

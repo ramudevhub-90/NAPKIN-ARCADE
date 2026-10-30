@@ -156,7 +156,7 @@ async function load() {
   $("tagline").textContent = j.tagline || "";
   $("ver").textContent = j.version > j.liveVersion ? `live v${j.liveVersion} · draft v${j.version}` : `live v${j.liveVersion}`;
   $("playLink").href = `/play/${id}`; $("friendsLink").href = `/play/${id}?friends=1`;
-  renderChat(); renderFeedback(); renderVersions(); renderShare();
+  renderChat(); renderFeedback(); renderVersions(); renderShare(); renderPublish();
   if (first) showPreview(j.liveVersion);
   setBusy(j.busy);
   if (j.busy) listen();
@@ -216,6 +216,46 @@ async function approveFromInbox() {
   if (!f || f.status !== "pending") return;
   document.querySelector(`[data-approve="${fid}"]`)?.click();
 }
+
+// ---------- publish everywhere ----------
+const pageUrl = () => `${location.origin}/play/${id}`;
+function renderPublish() {
+  const embed = `<iframe src="${pageUrl()}?embed=1" width="960" height="540" allow="autoplay; fullscreen; gamepad" style="border:0;max-width:100%" title="${(state.title || "Game").replace(/"/g, "")}"></iframe>`;
+  $("embedCode").textContent = embed; $("embedCode").dataset.code = embed;
+  $("pwaBuilder").href = `https://www.pwabuilder.com/reportcard?site=${encodeURIComponent(pageUrl())}`;
+  const m = state.monetize || {};
+  $("mAdsense").value = m.adsenseClient || ""; $("mAppAndroid").value = m.appAndroid || ""; $("mAppIos").value = m.appIos || "";
+  $("mIntAndroid").value = m.interstitialAndroid || ""; $("mIntIos").value = m.interstitialIos || ""; $("mEvery").value = String(m.every || 3); $("mTest").checked = m.test !== false;
+}
+async function download(target, query = "") {
+  const card = document.querySelector(`[data-export="${target}"]`) || $("pubAdsToggle");
+  card.classList.add("busy");
+  try {
+    const r = await fetch(`/api/projects/${id}/export/${target}${query}`);
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Export failed");
+    const name = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "")?.[1] || `${target}.zip`;
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(await r.blob()), download: name });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (err) { $("err").textContent = err.message; }
+  card.classList.remove("busy");
+}
+document.querySelectorAll("[data-export]").forEach((a) => (a.onclick = () => download(a.dataset.export)));
+$("pubAdsToggle").onclick = () => { $("adForm").hidden = !$("adForm").hidden; };
+$("adForm").onsubmit = (e) => {
+  e.preventDefault();
+  const q = new URLSearchParams({ ios: $("adIos").value.trim(), android: $("adAndroid").value.trim(), cta: $("adCta").value.trim() || "Play now", seconds: $("adSeconds").value || "30" });
+  download("playable", `?${q}`);
+};
+$("copyEmbed").onclick = async () => { try { await navigator.clipboard.writeText($("embedCode").dataset.code); $("copyEmbed").textContent = "Copied ✓"; setTimeout(() => ($("copyEmbed").textContent = "Copy embed"), 1500); } catch {} };
+$("monForm").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const j = await post(`/api/projects/${id}/monetize`, { adsenseClient: $("mAdsense").value, appAndroid: $("mAppAndroid").value, appIos: $("mAppIos").value, interstitialAndroid: $("mIntAndroid").value, interstitialIos: $("mIntIos").value, every: +$("mEvery").value, test: $("mTest").checked, adsenseTest: $("mTest").checked });
+    state.monetize = j.monetize; renderPublish();
+    const on = [j.monetize.adsenseClient && "web", (j.monetize.interstitialAndroid || j.monetize.interstitialIos) && "app"].filter(Boolean);
+    $("monNote").textContent = on.length ? `✓ Saved — ${on.join(" and ")} ads on${j.monetize.test ? " (test mode)" : ""}. Re-download the mobile export to include app ads.` : "✓ Saved — no ads (fill in an id that matches Google's format to turn them on).";
+  } catch (err) { $("monNote").textContent = err.message; }
+};
 
 resetLab();
 resetScreen();
