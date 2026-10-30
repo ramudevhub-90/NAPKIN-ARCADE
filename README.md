@@ -1,4 +1,6 @@
-# ✏️🎮 Napkin Arcade
+<p><img src="public/logo.svg" alt="" width="72" height="72"></p>
+
+# Napkin Arcade
 
 **Draw a game on a napkin — or describe it in one sentence. An AI game studio of NVIDIA Nemotron agents designs it, builds it in 3D, writes the code, playtests it with vision, and only ships it once it's fun. Then share a link and race your friends.**
 

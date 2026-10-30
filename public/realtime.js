@@ -4,8 +4,11 @@ import { config, idToken } from "/cognito.js";
 
 const QUERY = "subscription S($gameId: ID!) { onStudioEvent(gameId: $gameId) { gameId owner payload } }";
 
-export function subscribeStudio(gameId, onEvent) {
+export function subscribeStudio(gameId, handler) {
   let close = () => {};
+  // Each studio task runs once, however it arrives (live, or picked up after a reload).
+  const seen = new Set();
+  const onEvent = (e) => { if (e.type === "task") { if (seen.has(e.taskId)) return; seen.add(e.taskId); } handler(e); };
   const sse = () => {
     const es = new EventSource(`/api/projects/${gameId}/events`);
     es.onmessage = (m) => onEvent(JSON.parse(m.data));
@@ -14,7 +17,12 @@ export function subscribeStudio(gameId, onEvent) {
   const ready = (async () => {
     const cfg = await config(), token = cfg.appsync && (await idToken());
     if (!cfg.appsync || !token) return sse();
-    try { await appsync(cfg, token); }
+    try {
+      await appsync(cfg, token);
+      // The live subscription only carries new events: pick up any task sent before we subscribed.
+      const r = await fetch(`/api/projects/${gameId}/pending`).catch(() => null);
+      for (const t of (r?.ok ? (await r.json()).tasks : []) || []) onEvent(t);
+    }
     catch (e) {
       // Never leave the workshop stuck: fall back to the server's own event stream.
       console.warn("AppSync subscription failed, using the server stream instead:", e.message);

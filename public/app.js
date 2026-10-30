@@ -183,10 +183,9 @@ function onEvent(e) {
     case "review": log(`<b>🧭 Diagnosis:</b> ${e.diagnosis.map(esc).join(" ")}`); break;
     case "trials": log(`<b>🧪 Tested ${e.trials.length} ideas</b> (baseline ${e.baseline}): ${e.trials.map((t) => `${t.kept ? "✅" : "✖"} ${esc(t.label)} → ${t.score ?? "invalid"}`).join(" · ")}`); break;
     case "task": taskQueue.push(e); pumpTasks(); break;
-    case "spend": $("cost").textContent = `$${e.project.toFixed(4)}`; $("total").textContent = `$${e.totalUsd.toFixed(4)}`; break;
     case "error": log("✖ " + esc(e.text), "err"); $("build").disabled = false; break;
     case "final": showFinal(e); break;
-    case "done": if (e.projectCost != null) $("cost").textContent = `$${e.projectCost.toFixed(4)}`; $("build").disabled = false; loadMe(); break;
+    case "done": $("build").disabled = false; loadMe(); break;
   }
 }
 
@@ -241,6 +240,5 @@ loadMe();
   const s = await (await fetch("/api/status")).json();
   if (s.publicUrl) publicOrigin = s.publicUrl.replace(/\/$/, "");
   $("mode").textContent = s.live ? "LIVE · Nemotron on Nebius" : "OFFLINE"; $("mode").className = "badge " + (s.live ? "live" : "");
-  $("total").textContent = `$${s.totalUsd.toFixed(4)}`; $("cap").textContent = `/ $${s.hardCapUsd} cap`;
-  $("hint").textContent = s.live ? `Each game is capped at $${s.projectCapUsd} of AI spend.` : "The studio is offline on this server.";
+  $("hint").textContent = s.live ? "" : "The studio is offline on this server.";
 })();

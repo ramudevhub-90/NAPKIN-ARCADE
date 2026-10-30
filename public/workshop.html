@@ -8,20 +8,20 @@
   <link rel="stylesheet" href="/style.css">
   <style>
     .ws { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 16px; padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; min-width: 0; }
+    .card { background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 20px; padding: 16px; min-width: 0; box-shadow: 0 24px 60px rgba(0,0,0,.3); }
     .titlebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-    .titlebar h2 { margin: 0; font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--ink); }
+    .titlebar h2 { margin: 0; font: 22px var(--display); text-transform: none; letter-spacing: .2px; color: var(--ink); }
     .pill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: var(--panel2); }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     a.btn, button.btn { text-decoration: none; font-weight: 700; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
-    .btn.primary { background: var(--accent); border: none; color: #fff; }
+    .btn.primary { background: var(--grad); border: none; color: #fff; box-shadow: var(--glow); }
     .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
     .tabs button { font-weight: 700; border-radius: 99px; padding: 7px 14px; }
-    .tabs button.on { background: var(--ink); color: var(--bg); }
+    .tabs button.on { background: var(--grad); color: #fff; border-color: transparent; box-shadow: var(--glow); }
     .chat { height: 430px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px; }
     .msg { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 14px; white-space: pre-wrap; line-height: 1.45; }
-    .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-    .msg.studio { align-self: flex-start; background: var(--panel2); border-bottom-left-radius: 4px; }
+    .msg.user { align-self: flex-end; background: var(--grad); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 8px 20px rgba(255,47,160,.25); }
+    .msg.studio { align-self: flex-start; background: rgba(255,255,255,.07); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
     .msg.feedback { align-self: center; background: transparent; border: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
     .msg small { display: block; opacity: .7; font-size: 11px; margin-top: 4px; }
     .compose { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
@@ -29,17 +29,17 @@
     .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
     .chips button { font-size: 12.5px; padding: 5px 10px; border-radius: 99px; }
     .progress { font-size: 13px; color: var(--muted); min-height: 20px; margin-top: 6px; }
-    .progress b { color: var(--accent); }
+    .progress b { color: var(--accent); text-shadow: 0 0 10px var(--accent); }
     .fb { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
     .fb .meta { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px; }
     .status { font-weight: 700; text-transform: uppercase; font-size: 11px; }
     .status.pending { color: var(--amber); } .status.applied { color: var(--green); } .status.rejected { color: var(--muted); } .status.working, .status.approved { color: var(--blue); }
     .versions { font-size: 13px; display: grid; gap: 6px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
     .versions > div { display: grid; grid-template-columns: 36px 1fr auto auto; gap: 8px; align-items: center; background: var(--panel2); border-radius: 10px; padding: 6px 10px; border: 2px solid transparent; }
-    .versions > div.on { border-color: var(--accent); }
+    .versions > div.on { border-color: rgba(255,47,160,.6); box-shadow: 0 0 18px rgba(255,47,160,.15); }
     .versions button { font-size: 12px; padding: 4px 8px; }
     .vbtns { display: flex; gap: 4px; }
-    .pill.live { background: var(--green); color: #fff; } .pill.draft { background: var(--amber); color: #fff; }
+    .pill.live { background: rgba(57,255,136,.15); color: var(--green); border: 1px solid rgba(57,255,136,.5); } .pill.draft { background: rgba(255,210,63,.12); color: var(--amber); border: 1px solid rgba(255,210,63,.45); }
     .err { color: var(--red); font-size: 13px; }
     .share { display: grid; gap: 8px; }
     #circleEmail { border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 10px; font: inherit; min-width: 0; }

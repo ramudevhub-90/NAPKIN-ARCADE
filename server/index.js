@@ -35,10 +35,8 @@ function emitTo(p, ev) {
   // Owners also receive every event over AppSync (Cognito-authenticated, owner-filtered).
   if (APPSYNC && p.ownerSub) publishStudioEvent(p.id, p.ownerSub, e).catch((err) => console.error("AppSync publish:", err.message));
 }
-onSpend((s) => {
-  if (s.delta) store.addSpend(s.delta).catch(() => {});
-  for (const p of live.values()) if (!p.done) emitTo(p, { type: "spend", ...s, project: +p.budget.spent.toFixed(5) });
-});
+// AI spend is tracked for the platform's hard cap only; it is never sent to creators.
+onSpend((s) => { if (s.delta) store.addSpend(s.delta).catch(() => {}); });
 
 // A studio job (new game or revision): live events over SSE, browser tasks for sandboxed tests.
 function startJob(id, ownerSub, work, onDone, eventsFile) {
@@ -54,10 +52,11 @@ function startJob(id, ownerSub, work, onDone, eventsFile) {
   (async () => {
     try { await onDone(await work({ budget: p.budget, emit: (e) => emitTo(p, e), browser }), p); }
     catch (e) {
-      emitTo(p, { type: "error", text: e instanceof BudgetError ? `Stopped by spending guardrail: ${e.message}` : e.message });
+      if (e instanceof BudgetError) console.error(`spending guardrail (${id}):`, e.message);
+      emitTo(p, { type: "error", text: e instanceof BudgetError ? "The studio is at capacity right now — please try again a little later." : e.message });
       try { await onDone(null, p, e); } catch {}
     }
-    emitTo(p, { type: "done", projectCost: +p.budget.spent.toFixed(5), ...spending() });
+    emitTo(p, { type: "done" });
     p.done = true;
     if (eventsFile) save(id, eventsFile, p.events.filter((e) => e.type !== "task"));
     for (const res of p.clients) res.end();
@@ -156,7 +155,8 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const parts = url.pathname.split("/").filter(Boolean);
   try {
-    if (url.pathname === "/api/status") return json(res, 200, { live: ready, models: config.models, ...spending(), projectCapUsd: config.campaignCapUsd, publicUrl: process.env.PUBLIC_URL || null });
+    // Public status: whether the studio is live. AI spend and caps stay server-side.
+    if (url.pathname === "/api/status") return json(res, 200, { live: ready, publicUrl: process.env.PUBLIC_URL || null });
     // Public client config: Cognito pool/client and the AppSync endpoint.
     if (url.pathname === "/api/config") return json(res, 200, { cognito: cognitoConfig, appsync: APPSYNC ? { url: process.env.APPSYNC_URL, realtime: process.env.APPSYNC_URL.replace("https://", "wss://").replace("appsync-api", "appsync-realtime-api") } : null });
 
@@ -241,6 +241,11 @@ const server = http.createServer(async (req, res) => {
 
     if (parts[0] === "api" && parts[1] === "projects" && /^[a-z0-9-]+$/.test(parts[2] || "")) {
       const id = parts[2], p = live.get(id), what = parts[3];
+      // Studio tasks still waiting for the owner's browser (e.g. sent while the workshop was reloading).
+      if (what === "pending") {
+        if (p?.ownerSub && (await currentUser(req))?.sub !== p.ownerSub) return json(res, 403, { error: "Only the game's creator can watch the studio." });
+        return json(res, 200, { tasks: p && !p.done ? p.events.filter((e) => e.type === "task" && p.tasks[e.taskId]) : [] });
+      }
       if (what === "events") {
         // Live events (with studio tasks) go only to the game's owner.
         if (p?.ownerSub && (await currentUser(req))?.sub !== p.ownerSub) return json(res, 403, { error: "Only the game's creator can watch the studio." });
