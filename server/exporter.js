@@ -138,6 +138,8 @@ function mobile(src, opts) {
     "scripts/native.mjs": strToU8(`// Runs after "cap add": landscape fullscreen, controller + TV remote support, Android TV / Fire TV launcher entry, AdMob ids.
 import fs from "node:fs";
 const platform = process.argv[2], ads = ${JSON.stringify({ appAndroid: ads.appAndroid || "", appIos: ads.appIos || "" })};
+// Store releases need a higher build number each time: VERSION_CODE / VERSION_NAME come from the release.
+const code = process.env.VERSION_CODE, name = process.env.VERSION_NAME;
 if (platform === "android") {
   const mf = "android/app/src/main/AndroidManifest.xml";
   let x = fs.readFileSync(mf, "utf8");
@@ -148,7 +150,11 @@ if (platform === "android") {
   fs.writeFileSync(mf, x);
   fs.mkdirSync("android/app/src/main/res/drawable", { recursive: true });
   fs.copyFileSync("assets/tv-banner.png", "android/app/src/main/res/drawable/tv_banner.png");
-  console.log("Android: TV launcher, landscape, controller support" + (ads.appAndroid ? ", AdMob app id" : ""));
+  if (code) {
+    const gradle = "android/app/build.gradle";
+    fs.writeFileSync(gradle, fs.readFileSync(gradle, "utf8").replace(/versionCode \d+/, "versionCode " + code).replace(/versionName "[^"]*"/, 'versionName "' + name + '"'));
+  }
+  console.log("Android: TV launcher, landscape, controller support" + (ads.appAndroid ? ", AdMob app id" : "") + (code ? ", version " + name + " (" + code + ")" : ""));
 }
 if (platform === "ios") {
   const pl = "ios/App/App/Info.plist";
@@ -157,7 +163,11 @@ if (platform === "ios") {
   if (!x.includes("UIRequiresFullScreen")) x = x.replace("<dict>", "<dict>\\n\\t<key>UIRequiresFullScreen</key>\\n\\t<true/>\\n\\t<key>UIStatusBarHidden</key>\\n\\t<true/>");
   if (ads.appIos && !x.includes("GADApplicationIdentifier")) x = x.replace("<dict>", "<dict>\\n\\t<key>GADApplicationIdentifier</key>\\n\\t<string>" + ads.appIos + "</string>");
   fs.writeFileSync(pl, x);
-  console.log("iOS: landscape, full screen" + (ads.appIos ? ", AdMob app id" : ""));
+  if (code) {
+    const pbx = "ios/App/App.xcodeproj/project.pbxproj";
+    fs.writeFileSync(pbx, fs.readFileSync(pbx, "utf8").replace(/CURRENT_PROJECT_VERSION = [^;]+;/g, "CURRENT_PROJECT_VERSION = " + code + ";").replace(/MARKETING_VERSION = [^;]+;/g, "MARKETING_VERSION = " + name + ";"));
+  }
+  console.log("iOS: landscape, full screen" + (ads.appIos ? ", AdMob app id" : "") + (code ? ", version " + name + " (" + code + ")" : ""));
 }
 `),
     ".github/workflows/android.yml": strToU8(`name: Android (phone, tablet, Android TV, Fire TV)

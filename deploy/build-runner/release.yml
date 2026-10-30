@@ -1,0 +1,36 @@
+# Copy into the platform's private build repository as .github/workflows/release.yml,
+# together with release.mjs at the repository root. The Napkin Arcade server dispatches it.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      release_id: { required: true }
+      platform: { required: true }
+      api: { required: true }
+      token: { required: true }
+run-name: "${{ inputs.platform }} release ${{ inputs.release_id }}"
+jobs:
+  android:
+    if: ${{ inputs.platform == 'android' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - run: echo "::add-mask::${{ inputs.token }}"
+      - run: node release.mjs
+        env: { RELEASE_ID: "${{ inputs.release_id }}", PLATFORM: android, API: "${{ inputs.api }}", BUILD_TOKEN: "${{ inputs.token }}" }
+  ios:
+    if: ${{ inputs.platform == 'ios' }}
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: echo "::add-mask::${{ inputs.token }}"
+      - run: node release.mjs
+        env: { RELEASE_ID: "${{ inputs.release_id }}", PLATFORM: ios, API: "${{ inputs.api }}", BUILD_TOKEN: "${{ inputs.token }}" }

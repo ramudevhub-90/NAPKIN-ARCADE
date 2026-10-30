@@ -157,6 +157,7 @@ async function load() {
   $("ver").textContent = j.version > j.liveVersion ? `live v${j.liveVersion} · draft v${j.version}` : `live v${j.liveVersion}`;
   $("playLink").href = `/play/${id}`; $("friendsLink").href = `/play/${id}?friends=1`;
   renderChat(); renderFeedback(); renderVersions(); renderShare(); renderPublish();
+  if (first) loadStores();
   if (first) showPreview(j.liveVersion);
   setBusy(j.busy);
   if (j.busy) listen();
@@ -256,6 +257,49 @@ $("monForm").onsubmit = async (e) => {
     $("monNote").textContent = on.length ? `✓ Saved — ${on.join(" and ")} ads on${j.monetize.test ? " (test mode)" : ""}. Re-download the mobile export to include app ads.` : "✓ Saved — no ads (fill in an id that matches Google's format to turn them on).";
   } catch (err) { $("monNote").textContent = err.message; }
 };
+
+// ---------- app stores: connect, build in the cloud, release ----------
+let stores = null, storesPoll = null;
+const fileText = (input) => new Promise((ok, no) => { const f = input.files?.[0]; if (!f) return no(new Error("Choose the key file.")); const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsText(f); });
+const STATE = { queued: "queued", building: "building", uploading: "uploading", uploaded: "uploaded", testflight: "in TestFlight", in_review: "in review", live: "live", failed: "failed" };
+async function loadStores() {
+  const r = await fetch(`/api/projects/${id}/stores`);
+  if (!r.ok) return;
+  stores = await r.json(); renderStores();
+  clearTimeout(storesPoll);
+  if (stores.releases.some((x) => ["queued", "building", "uploading"].includes(x.state))) storesPoll = setTimeout(loadStores, 10000);
+}
+function renderStores() {
+  const s = stores, box = $("storesBox");
+  if (!s.enabled) { box.innerHTML = '<p class="muted" style="font-size:13px">App store connections aren\'t enabled on this server yet. The app project download above builds and signs itself with GitHub Actions.</p>'; return; }
+  const conn = (key, name, c, form) => `<div class="conn"><b>${name}</b>${c.connected ? `<small class="on">✓ Connected · ${esc(c.label)}</small><button class="btn" type="button" data-disconnect="${key}">Disconnect</button>` : `<small>Not connected</small>${form}`}</div>`;
+  const google = `<form class="subform" style="grid-template-columns:1fr;margin:0;padding:0;border:0;background:none" data-connect="google"><label>Service-account key (.json)<input type="file" accept=".json,application/json" name="file"></label><button class="btn primary">Connect Google Play</button></form>`;
+  const apple = `<form class="subform" style="grid-template-columns:1fr;margin:0;padding:0;border:0;background:none" data-connect="apple"><label>Issuer ID<input name="issuerId" placeholder="69a6de7f-…"></label><label>Key ID<input name="keyId" maxlength="10" placeholder="ABC123DEFG"></label><label>Team ID<input name="teamId" maxlength="10" placeholder="A1B2C3D4E5"></label><label>API key (.p8)<input type="file" accept=".p8" name="file"></label><button class="btn primary">Connect App Store</button></form>`;
+  const rel = (r) => `<div class="rel"><div class="head"><span>${r.platform === "ios" ? "🍎 iOS" : "🤖 Android"} ${esc(r.versionName)} <span class="muted" style="font-weight:500">(${r.versionCode})</span></span><span class="st ${r.state}">${STATE[r.state] || r.state}</span></div>
+    <ol>${(r.steps || []).slice(-4).map((x) => `<li>${esc(x.text)}</li>`).join("")}</ol>
+    <div class="row" style="margin-top:8px">${r.platform === "android" && r.state === "uploaded" ? `<button class="btn primary" data-rel="${r.rid}" data-act="promote">Promote to production</button>` : ""}${r.platform === "ios" && r.state === "uploaded" ? `<button class="btn" data-rel="${r.rid}" data-act="refresh">Check TestFlight</button>` : ""}${r.platform === "ios" && ["uploaded", "testflight"].includes(r.state) ? `<button class="btn primary" data-rel="${r.rid}" data-act="submit">Submit for App Review</button>` : ""}</div></div>`;
+  box.innerHTML = `<div class="conns">${conn("google", "Google Play", s.google, google)}${conn("apple", "App Store Connect", s.apple, apple)}</div>
+    <form class="subform" id="storeIds"><label>Android package name<input id="sAndroid" placeholder="com.yourstudio.${(state.title || "game").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || "game"}" value="${esc(s.app.androidPackage)}"></label><label>iOS bundle id<input id="sIos" placeholder="com.yourstudio.${(state.title || "game").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || "game"}" value="${esc(s.app.iosBundle)}"></label><button class="btn">Save store ids</button></form>
+    <form class="subform" id="relForm"><label style="grid-column:1/-1">What's new (optional)<input id="relNotes" maxlength="500" placeholder="New stage, faster taxi, bug fixes"></label>
+      <button class="btn primary" type="button" data-release="android" ${s.builds ? "" : "disabled"}>🚀 Android → Play internal testing</button><button class="btn primary" type="button" data-release="ios" ${s.builds ? "" : "disabled"}>🚀 iOS → TestFlight</button>
+      ${s.builds ? "" : '<p class="muted" style="margin:0;font-size:12px">Cloud builds aren\'t switched on for this server yet — connections and store ids are saved; releases start once builds are enabled. Meanwhile the app project download builds itself with GitHub Actions.</p>'}</form>
+    <p class="muted" id="storeNote" style="font-size:12.5px;margin:8px 0 0"></p>
+    ${s.releases.map(rel).join("")}
+    ${s.keystore ? `<p style="font-size:12.5px;margin:10px 0 0">🔑 <a href="/api/projects/${id}/stores/keystore">Download this game's Android upload key</a> — keep a backup; Google needs it for every update.</p>` : ""}
+    <div class="outside"><b>Done outside Napkin Arcade (one time):</b> developer accounts (Google $25 once, Apple $99/year) · create the app in the Play Console and upload its first build there · create the app record in App Store Connect · store listing, content rating and privacy forms · new personal Play accounts must run a 14-day closed test with 12 testers before production.</div>`;
+  box.querySelectorAll("[data-connect]").forEach((f) => (f.onsubmit = async (e) => {
+    e.preventDefault(); $("storeNote").textContent = "";
+    try {
+      const text = await fileText(f.elements.file);
+      const payload = f.dataset.connect === "google" ? { serviceAccount: text } : { issuerId: f.elements.issuerId.value, keyId: f.elements.keyId.value, teamId: f.elements.teamId.value, p8: text };
+      await post(`/api/stores/${f.dataset.connect}`, payload); await loadStores();
+    } catch (err) { $("storeNote").textContent = err.message; }
+  }));
+  box.querySelectorAll("[data-disconnect]").forEach((b) => (b.onclick = async () => { if (!confirm("Disconnect this store? Its key is deleted from Napkin Arcade.")) return; await fetch(`/api/stores/${b.dataset.disconnect}`, { method: "DELETE" }); loadStores(); }));
+  $("storeIds").onsubmit = async (e) => { e.preventDefault(); try { await post(`/api/projects/${id}/stores`, { androidPackage: $("sAndroid").value, iosBundle: $("sIos").value }); await loadStores(); $("storeNote").textContent = "✓ Store ids saved."; } catch (err) { $("storeNote").textContent = err.message; } };
+  box.querySelectorAll("[data-release]").forEach((b) => (b.onclick = async () => { $("storeNote").textContent = ""; try { await post(`/api/projects/${id}/releases`, { platform: b.dataset.release, notes: $("relNotes").value }); await loadStores(); } catch (err) { $("storeNote").textContent = err.message; } }));
+  box.querySelectorAll("[data-rel]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { const j = await post(`/api/projects/${id}/releases/${b.dataset.rel}`, { action: b.dataset.act }); if (j.note) $("storeNote").textContent = j.note; await loadStores(); } catch (err) { $("storeNote").textContent = err.message; b.disabled = false; } }));
+}
 
 resetLab();
 resetScreen();

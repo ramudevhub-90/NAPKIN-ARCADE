@@ -11,6 +11,11 @@
 //   TOUR#<tid>      ENTRY#<sub>             an entrant and their best run
 //   USER#<sub>      TOUR#<tid>              tournaments a person hosts or entered
 //   TJOIN#<code>    TOUR                    tournament link lookup
+//   USER#<sub>      CONNECT#google|apple    sealed store credentials (Play service account / App Store Connect key)
+//   GAME#<id>       STOREAPP                Play package name and iOS bundle id
+//   GAME#<id>       KEYSTORE                sealed Android upload key (made on the first release)
+//   GAME#<id>       RELEASE#<rid>           a store release: platform, version, state, timeline
+//   RELEASE#<rid>   PTR                     release → game lookup for the build runner
 //   GAME#<id>       META                    owner, title, version, status, visibility, changelog… (GSI1: OWNER#<sub>, GSI2: GALLERY when public)
 //   GAME#<id>       VERSION#0001            summary, score, at (payload in S3: games/<id>/v1.json)
 //   GAME#<id>       CHAT#<ts>#<rand>        role, text, version…
@@ -238,6 +243,35 @@ export async function tournamentStandings(tid) {
 export const myTournaments = (sub) => queryPrefix(`USER#${sub}`, "TOUR#");
 export async function endTournamentNow(tid) {
   await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `TOUR#${tid}`, sk: "META" }, UpdateExpression: "SET endsAt = :n", ExpressionAttributeValues: { ":n": new Date().toISOString() } }));
+}
+
+// ---- app store connections and releases ----
+export const getConnection = (sub, storeName) => getItem(`USER#${sub}`, `CONNECT#${storeName}`);
+export const putConnection = (sub, storeName, fields) => putItem({ pk: `USER#${sub}`, sk: `CONNECT#${storeName}`, store: storeName, at: new Date().toISOString(), ...fields });
+export const deleteConnection = (sub, storeName) => deleteItem(`USER#${sub}`, `CONNECT#${storeName}`);
+export const getStoreApp = (id) => getItem(`GAME#${id}`, "STOREAPP");
+export const putStoreApp = (id, fields) => putItem({ pk: `GAME#${id}`, sk: "STOREAPP", ...fields, at: new Date().toISOString() });
+export const getKeystore = (id) => getItem(`GAME#${id}`, "KEYSTORE");
+export const putKeystore = (id, sealed) => putItem({ pk: `GAME#${id}`, sk: "KEYSTORE", sealed, at: new Date().toISOString() });
+export const releases = (id) => queryPrefix(`GAME#${id}`, "RELEASE#", { forward: false, limit: 30 });
+export async function createRelease(id, r) {
+  const at = new Date().toISOString();
+  const item = { pk: `GAME#${id}`, sk: `RELEASE#${r.rid}`, gameId: id, state: "queued", steps: [{ at, state: "queued", text: r.firstStep || "Queued for a cloud build." }], createdAt: at, ...r };
+  delete item.firstStep;
+  await putItem(item);
+  await putItem({ pk: `RELEASE#${r.rid}`, sk: "PTR", gameId: id, ttl: Math.floor(Date.now() / 1000) + 30 * 864e5 });
+  return item;
+}
+export async function getRelease(rid) {
+  const ptr = await getItem(`RELEASE#${rid}`, "PTR");
+  return ptr ? getItem(`GAME#${ptr.gameId}`, `RELEASE#${rid}`) : null;
+}
+// Append a timeline step and set the state (plus any extra fields).
+export async function releaseStep(r, state, text, fields = {}) {
+  const names = { "#s": "state", "#st": "steps", "#u": "updatedAt" }, values = { ":s": state, ":st": [{ at: new Date().toISOString(), state, text }], ":u": new Date().toISOString() };
+  const sets = ["#s = :s", "#st = list_append(#st, :st)", "#u = :u"];
+  for (const [k, v] of Object.entries(fields)) { names[`#f_${k}`] = k; values[`:f_${k}`] = v; sets.push(`#f_${k} = :f_${k}`); }
+  await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: r.pk, sk: r.sk }, UpdateExpression: `SET ${sets.join(", ")}`, ExpressionAttributeNames: names, ExpressionAttributeValues: values }));
 }
 
 // ---- versions / chat / feedback ----

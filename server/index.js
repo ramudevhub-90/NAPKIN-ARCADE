@@ -10,6 +10,7 @@ import { actMessages3d, PERSONAS, testerSummaryMessages } from "./prompts3d.js";
 import { startSession, logout, me, currentUser, chargeBuild, chargeRevision, cognitoConfig } from "./cognito.js";
 import { createRoom, handleUpgrade } from "./rooms.js";
 import { buildExport, exportSource, TARGETS } from "./exporter.js";
+import { storeRoutes } from "./stores/routes.js";
 import * as store from "../aws/lib/store.mjs";
 import { publishStudioEvent } from "../aws/lib/appsync.mjs";
 import { sendMail, circleInviteEmail, gameSharedEmail, groupInviteEmail, tournamentInviteEmail } from "../aws/lib/mail.mjs";
@@ -192,6 +193,9 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/status") return json(res, 200, { live: ready, publicUrl: process.env.PUBLIC_URL || null });
     // Public client config: Cognito pool/client and the AppSync endpoint.
     if (url.pathname === "/api/config") return json(res, 200, { cognito: cognitoConfig, appsync: APPSYNC ? { url: process.env.APPSYNC_URL, realtime: process.env.APPSYNC_URL.replace("https://", "wss://").replace("appsync-api", "appsync-realtime-api") } : null });
+
+    // ---- app store connector (Google Play / App Store Connect, cloud builds, releases) ----
+    if (await storeRoutes(req, res, { url, parts, json, body, currentUser, ownedGame, store, publicUrl: PUBLIC_URL })) return;
 
     // ---- accounts: Amazon Cognito (custom passwordless auth) → session cookie ----
     if (url.pathname === "/api/auth/session" && req.method === "POST") return json(res, 200, { user: await startSession(res, await body(req, 2e4)) });

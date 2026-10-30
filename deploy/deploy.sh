@@ -18,8 +18,12 @@ out() { aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks
 BUCKET=$(out Bucket); IID=$(out InstanceId); IP=$(out PublicIp); NS=$(out NameServers); ZONE=$(out ZoneId)
 
 echo "▶ App settings → SSM Parameter Store (encrypted; never in git)…"
-ENV_BODY=$({ grep -E '^(NEBIUS_API_KEY|NEBIUS_BASE_URL|MODEL_[A-Z]+|HARD_CAP_USD|CAMPAIGN_CAP_USD|LIVE_RUNS_PER_HOUR|DAILY_BUILDS_PER_USER|DEMO_LOGIN_EMAIL|DEMO_LOGIN_CODE|DEMO_DAILY_BUILDS)=' .env || true
-  echo "MAIL_PROVIDER=ses"; echo "AWS_REGION=$REGION"
+# Store-connector key (encrypts creators' Google Play / App Store keys): created once and kept across
+# deploys — rotating it would make saved connections unreadable.
+CK=$(aws ssm get-parameter --name /napkin-arcade/connector-key --with-decryption --query Parameter.Value --output text 2>/dev/null || true)
+if [ -z "$CK" ] || [ "$CK" = "None" ]; then CK=$(openssl rand -hex 32); aws ssm put-parameter --name /napkin-arcade/connector-key --type SecureString --value "$CK" >/dev/null; fi
+ENV_BODY=$({ grep -E '^(NEBIUS_API_KEY|NEBIUS_BASE_URL|MODEL_[A-Z]+|HARD_CAP_USD|CAMPAIGN_CAP_USD|LIVE_RUNS_PER_HOUR|DAILY_BUILDS_PER_USER|DEMO_LOGIN_EMAIL|DEMO_LOGIN_CODE|DEMO_DAILY_BUILDS|BUILD_GITHUB_REPO|BUILD_GITHUB_TOKEN)=' .env || true
+  echo "MAIL_PROVIDER=ses"; echo "AWS_REGION=$REGION"; echo "CONNECTOR_KEY=$CK"
   # Serverless backbone (infra/ CDK stack): DynamoDB, S3, Cognito, AppSync.
   if [ -f aws/outputs.json ]; then node -e '
     const o = require("./aws/outputs.json").NapkinArcadeServerless || {};

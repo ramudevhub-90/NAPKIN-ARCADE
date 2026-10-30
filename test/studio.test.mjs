@@ -51,3 +51,25 @@ test("multiplayer is a hard gate: only a lab run that passed the 2-player race c
   assert.match(multiplayerProblem({ sessions: [{ outcome: "won" }] }), /didn't run the 2-player race check/); // an outdated lab can't wave a game through
   assert.equal(multiplayerProblem({ compileError: "boom" }), null); // crashes are reported separately
 });
+
+test("store credentials are sealed with AES-GCM and tampering is detected", async () => {
+  process.env.CONNECTOR_KEY = "ab".repeat(32);
+  const { seal, unseal } = await import("../server/stores/vault.js");
+  const box = seal({ p8: "secret" });
+  assert.ok(!box.includes("secret"));
+  assert.deepEqual(unseal(box), { p8: "secret" });
+  const [v, iv, tag, ct] = box.split(".");
+  assert.throws(() => unseal([v, iv, tag, Buffer.from("x" + ct).toString("base64")].join(".")));
+});
+
+test("store keys are validated before they are saved", async () => {
+  const crypto = await import("node:crypto");
+  const play = await import("../server/stores/google-play.js"), asc = await import("../server/stores/app-store.js");
+  const rsa = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" });
+  assert.equal(play.parseServiceAccount(JSON.stringify({ type: "service_account", client_email: "a@b.iam.gserviceaccount.com", private_key: rsa })).client_email, "a@b.iam.gserviceaccount.com");
+  assert.throws(() => play.parseServiceAccount("{\"type\":\"authorized_user\"}"));
+  const ec = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" }).privateKey.export({ type: "pkcs8", format: "pem" });
+  assert.equal(asc.parseApiKey({ issuerId: crypto.randomUUID(), keyId: "abc123defg", teamId: "team123456", p8: ec }).keyId, "ABC123DEFG");
+  assert.throws(() => asc.parseApiKey({ issuerId: crypto.randomUUID(), keyId: "ABC123DEFG", teamId: "TEAM123456", p8: rsa })); // RSA isn't an ASC key
+  assert.ok(play.PACKAGE.test("com.studio.game") && !play.PACKAGE.test("Com.Studio"));
+});
