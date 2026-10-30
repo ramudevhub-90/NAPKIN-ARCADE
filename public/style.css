@@ -77,6 +77,16 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding: 24px
 .me small { font-size: 11px; color: var(--muted); line-height: 1.1; }
 .me .out { width: 34px; height: 34px; padding: 0; border-radius: 50%; display: grid; place-items: center; font-size: 16px; color: var(--muted); background: rgba(255, 255, 255, .05); } .me .out:hover { color: #fff; background: rgba(255, 90, 110, .2); border-color: rgba(255, 90, 110, .5); }
 @media (max-width: 760px) { .navpill .ub { padding: 8px 10px; } .navpill .ub .ic { display: none; } .me .who { min-width: 0; } .me small { display: none; } }
+.hostbox { margin-top: 14px; background: var(--panel); backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 18px; padding: 4px 18px; }
+.hostbox summary { cursor: pointer; font: 15px var(--display); padding: 12px 0; list-style: none; } .hostbox summary::-webkit-details-marker { display: none; } .hostbox[open] summary { color: var(--accent); }
+.hostform { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 4px 0 16px; }
+.hostform label { display: grid; gap: 6px; font: 600 12px Inter, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; } .hostform .wide { grid-column: 1 / -1; }
+.hostform input, .hostform select { text-transform: none; letter-spacing: 0; font: 500 14.5px Inter, sans-serif; }
+.hostform .money { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 6px; }
+.hostform .err { color: var(--red); }
+.tour { position: relative; } .tour .st { position: absolute; top: 12px; right: 12px; font: 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; }
+.tour .st.live { color: #fff; background: rgba(255,47,160,.25); border: 1px solid rgba(255,47,160,.6); } .tour .st.upcoming { color: var(--blue); border: 1px solid rgba(62,240,255,.4); } .tour .st.ended { color: var(--amber); border: 1px solid rgba(255,210,63,.4); }
+@media (max-width: 900px) { .hostform { grid-template-columns: 1fr; } }
 .newgroup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 10px; margin-top: 14px; } .newgroup button.primary { font-size: 15px; padding: 12px 18px; }
 @media (max-width: 760px) { .newgroup { grid-template-columns: 1fr; } }
 .mygames { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }

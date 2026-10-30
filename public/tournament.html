@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tournament · Napkin Arcade</title>
+  <meta property="og:site_name" content="Napkin Arcade">
+  <meta property="og:title" content="A tournament on Napkin Arcade">
+  <meta property="og:description" content="Play the game, post your best score, climb the leaderboard.">
+  <meta property="og:image" content="https://napkinarcade.revenuerush.in/logo-512.png">
+  <link rel="icon" href="/logo.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .twrap { max-width: 1120px; margin: 0 auto; padding: 22px 20px 48px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 18px; }
+    .card { background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 22px; padding: 20px; min-width: 0; box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+    .hero { grid-column: 1 / -1; position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; }
+    .hero::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--grad); }
+    .hero h1 { font-size: clamp(30px, 5vw, 48px); margin: 10px 0 8px; background: linear-gradient(90deg, var(--blue), var(--accent) 55%, var(--orange)); -webkit-background-clip: text; background-clip: text; color: transparent; word-break: break-word; }
+    .hero p { margin: 0 0 12px; color: #d8d3ee; font-size: 16px; max-width: 700px; }
+    .facts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .facts span, .facts a { font-size: 13px; color: var(--muted); border: 1px solid var(--line); background: rgba(255,255,255,.04); border-radius: 99px; padding: 5px 12px; text-decoration: none; }
+    .facts a { color: var(--ink); }
+    .status { display: inline-flex; align-items: center; gap: 8px; font: 12px var(--display); letter-spacing: .12em; text-transform: uppercase; padding: 6px 14px; border-radius: 99px; }
+    .status.live { color: #fff; background: rgba(255,47,160,.18); border: 1px solid rgba(255,47,160,.6); } .status.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: pulse 1.2s infinite; }
+    .status.upcoming { color: var(--blue); background: rgba(62,240,255,.08); border: 1px solid rgba(62,240,255,.35); }
+    .status.ended { color: var(--amber); background: rgba(255,210,63,.08); border: 1px solid rgba(255,210,63,.4); }
+    .clock { text-align: center; min-width: 210px; }
+    .clock small { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+    .clock b { font: clamp(26px, 4vw, 38px) var(--display); font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+    .go { display: block; width: 100%; text-align: center; text-decoration: none; color: #fff; font: 18px var(--display); padding: 15px; border: 0; border-radius: 16px; background: var(--grad); box-shadow: var(--glow); cursor: pointer; transition: transform .15s; margin-top: 14px; }
+    .go:hover { transform: translateY(-2px); } .go[disabled] { opacity: .5; cursor: default; transform: none; }
+    .prize { text-align: center; }
+    .prize .amt { font: clamp(34px, 5vw, 46px)/1.1 var(--display); margin: 4px 0 6px; background: linear-gradient(90deg, #ffd23f, #ff8a3d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .places { display: grid; gap: 6px; margin: 12px 0 8px; }
+    .places div { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.04); font-weight: 600; }
+    .fine { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+    .podium { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 10px; align-items: end; margin: 6px 0 18px; }
+    .podium div { text-align: center; border-radius: 16px 16px 8px 8px; padding: 12px 8px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+    .podium .p1 { padding-top: 22px; background: linear-gradient(180deg, rgba(255,210,63,.22), rgba(255,255,255,.03)); border-color: rgba(255,210,63,.5); }
+    .podium .p2 { background: linear-gradient(180deg, rgba(217,221,230,.16), rgba(255,255,255,.03)); }
+    .podium .p3 { background: linear-gradient(180deg, rgba(233,163,106,.18), rgba(255,255,255,.03)); }
+    .podium .m { font-size: 30px; display: block; } .podium b { display: block; margin: 4px 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .podium span { color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; font: 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; }
+    td { padding: 9px 8px; border-top: 1px solid var(--line); } td.r { width: 46px; font-weight: 700; } td.s { font: 16px var(--display); text-align: right; }
+    tr.you td { background: rgba(255,47,160,.1); } tr.you td:first-child { border-radius: 10px 0 0 10px; } tr.you td:last-child { border-radius: 0 10px 10px 0; }
+    .empty { color: var(--muted); font-size: 14px; margin: 6px 0; }
+    .mystats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; text-align: center; }
+    .mystats div { background: rgba(255,255,255,.04); border-radius: 12px; padding: 10px 6px; } .mystats b { display: block; font: 20px var(--display); } .mystats small { color: var(--muted); font-size: 11.5px; }
+    .linkrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+    .link { font: 600 13px ui-monospace, Menlo, monospace; color: var(--blue); background: rgba(62,240,255,.06); border: 1px solid rgba(62,240,255,.25); border-radius: 12px; padding: 10px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; font: 700 14px Inter, sans-serif; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); cursor: pointer; }
+    .btn.primary { background: var(--grad); border: 0; color: #fff; box-shadow: var(--glow); }
+    .side { display: grid; gap: 18px; align-content: start; }
+    .note { font-size: 13px; color: var(--muted); margin: 10px 0 0; } .err { color: var(--red); }
+    @media (max-width: 900px) { .twrap { grid-template-columns: 1fr; } .hero { grid-template-columns: 1fr; } .clock { text-align: left; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><a class="logo" href="/" aria-label="Napkin Arcade home"><img class="mark" src="/logo.svg" alt="" width="46" height="46"></a><div><h1>Napkin <b>Arcade</b></h1><p>Tournament</p></div></div>
+    <div class="userbar"><nav class="navpill" aria-label="Site"><a href="/arcade" class="ub"><span class="ic">🕹</span>Arcade</a><a href="/studio#tournaments" class="ub"><span class="ic">🏆</span>Tournaments</a><a href="/studio" class="ub"><span class="ic">🎮</span>Studio</a></nav></div>
+  </header>
+  <main class="twrap" id="page"><section class="card hero"><p class="empty">Loading the tournament…</p></section></main>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const code = location.pathname.split("/")[2];
+    const money = (n, cur) => { try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(n); } catch { return `${cur} ${n}`; } };
+    const MEDAL = ["🥇", "🥈", "🥉"], PLACE = ["1st", "2nd", "3rd"];
+    const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+    let t = null, skew = 0;
+    const post = async (path, body) => { const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Something went wrong"); return j; };
+
+    function clock() {
+      if (!t || !$("clock")) return;
+      const now = Date.now() + skew, target = Date.parse(t.status === "upcoming" ? t.startsAt : t.endsAt), left = Math.max(0, target - now);
+      if (t.status !== "ended" && left === 0) return load();
+      const d = Math.floor(left / 864e5), h = Math.floor(left / 36e5) % 24, m = Math.floor(left / 6e4) % 60, s = Math.floor(left / 1e3) % 60;
+      $("clock").textContent = t.status === "ended" ? "Final" : `${d ? d + "d " : ""}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+    function render() {
+      document.title = `${t.name} · Napkin Arcade`;
+      const free = !t.prize.amount, you = t.you, playUrl = `/play/${t.game.id}?tour=${t.code}`;
+      let action;
+      if (t.status === "ended") action = `<button class="go" disabled>Tournament over</button>`;
+      else if (!you.signedIn) action = `<a class="go" href="/login?next=${encodeURIComponent(location.pathname)}">Sign in to enter</a>`;
+      else if (!you.canEnter) action = `<button class="go" disabled>Only for members of ${esc(t.group?.name || "its group")}</button>`;
+      else if (!you.entered) action = `<button class="go" id="enter">Enter the tournament</button>`;
+      else if (t.status === "live") action = `<a class="go" href="${playUrl}">▶ Play now — best score counts</a>`;
+      else action = `<button class="go" disabled>You're in · starts soon</button>`;
+      const top = t.standings.slice(0, 3);
+      const podium = top.length ? `<div class="podium">${[1, 0, 2].map((i) => top[i] ? `<div class="p${i + 1}"><span class="m">${MEDAL[i]}</span><b>${esc(top[i].name)}${top[i].you ? " (you)" : ""}</b><span>${top[i].score} pts</span></div>` : "<div style='visibility:hidden'></div>").join("")}</div>` : "";
+      const table = t.standings.length ? `<table><thead><tr><th>#</th><th>Player</th><th>Progress</th><th>Time</th><th style="text-align:right">Score</th></tr></thead><tbody>${t.standings.map((r) => `<tr class="${r.you ? "you" : ""}"><td class="r">${MEDAL[r.rank - 1] || r.rank}</td><td>${esc(r.name)}${r.you ? " (you)" : ""}</td><td>${r.won ? "🏁 finished" : Math.round(r.progress * 100) + "%"}</td><td>${fmtTime(r.time)}</td><td class="s">${r.score}</td></tr>`).join("")}</tbody></table>`
+        : `<p class="empty">${t.status === "upcoming" ? "The leaderboard opens when the tournament starts." : "No scores yet — be the first on the board!"}</p>`;
+      $("page").innerHTML = `
+        <section class="card hero"><div>
+          <span class="status ${t.status}">${t.status === "live" ? "Live now" : t.status === "upcoming" ? "Upcoming" : "Ended"}</span>
+          <h1>${esc(t.name)}</h1>${t.about ? `<p>${esc(t.about)}</p>` : ""}
+          <div class="facts"><a href="/play/${t.game.id}">🎮 ${esc(t.game.title)}</a><span>Hosted by ${esc(t.hostName)}</span><span>👥 ${t.entrants} ${t.entrants === 1 ? "player" : "players"}</span>${t.group ? `<span>For ${esc(t.group.name)}</span>` : "<span>Open to anyone with the link</span>"}</div>
+        </div><div class="clock"><small>${t.status === "upcoming" ? "Starts in" : t.status === "live" ? "Ends in" : "Ended"}</small><b id="clock"></b><small style="margin-top:6px">${new Date(t.startsAt).toLocaleString()} → ${new Date(t.endsAt).toLocaleString()}</small></div></section>
+        <section class="card"><h2>${t.status === "ended" ? "Final results" : "Leaderboard"}</h2>${podium}${table}</section>
+        <div class="side">
+          <section class="card prize"><h2>Prize</h2>
+            <div class="amt">${free ? "Bragging rights 🏆" : money(t.prize.amount, t.prize.currency)}</div>
+            ${!free && t.prize.split.length > 1 ? `<div class="places">${t.prize.places.map((p, i) => `<div><span>${MEDAL[i]} ${PLACE[i]}</span><span>${money(p, t.prize.currency)}</span></div>`).join("")}</div>` : !free ? `<div class="places"><div><span>🥇 Winner takes all</span><span>${money(t.prize.amount, t.prize.currency)}</span></div></div>` : ""}
+            ${t.prize.note ? `<p class="note">${esc(t.prize.note)}</p>` : ""}
+            ${free ? "" : `<p class="fine">Prizes are paid by the host directly, outside Napkin Arcade.</p>`}
+            ${action}
+            ${you.entered ? `<div class="mystats"><div><b>${you.best ? you.best.score : "—"}</b><small>your best</small></div><div><b>${you.rank ? "#" + you.rank : "—"}</b><small>your rank</small></div><div><b>${you.runs}</b><small>runs</small></div></div>` : ""}
+            <p class="note err" id="actErr"></p>
+          </section>
+          <section class="card"><h2>Rules</h2><p class="note" style="margin:0">Play <b>${esc(t.game.title)}</b> as many times as you like while the tournament is live. Your best score counts (ties go to the faster run). You need to be signed in, one entry per account.</p></section>
+          <section class="card"><h2>Invite players</h2><div class="linkrow"><span class="link">${esc(t.url)}</span><button class="btn primary" id="copy">Copy</button><button class="btn" id="share">Share</button></div>
+            ${t.host && t.status !== "ended" ? `<button class="btn" id="end" style="margin-top:12px;font-size:12.5px">⏹ End the tournament now</button>` : ""}</section>
+        </div>`;
+      clock();
+      $("enter")?.addEventListener("click", async (e) => { e.target.disabled = true; try { t = await post(`/api/t/${code}`, { action: "enter" }); render(); } catch (err) { $("actErr").textContent = err.message; e.target.disabled = false; } });
+      $("end")?.addEventListener("click", async () => { if (!confirm("End the tournament now? Scores are final from this moment.")) return; try { t = await post(`/api/t/${code}`, { action: "end" }); render(); } catch (err) { $("actErr").textContent = err.message; } });
+      $("copy").onclick = async () => { try { await navigator.clipboard.writeText(t.url); $("copy").textContent = "Copied ✓"; setTimeout(() => ($("copy").textContent = "Copy"), 1600); } catch {} };
+      $("share").onclick = async () => { if (navigator.share) { try { await navigator.share({ title: t.name, text: `Join my ${t.game.title} tournament on Napkin Arcade`, url: t.url }); } catch {} } else $("copy").click(); };
+    }
+    async function load() {
+      const r = await fetch(`/api/t/${code}`), j = await r.json().catch(() => ({}));
+      if (!r.ok) { $("page").innerHTML = `<section class="card hero"><div><h1>Tournament not found</h1><p>${esc(j.error || "")}</p><a class="btn" href="/arcade">Go to the arcade</a></div></section>`; return; }
+      t = j; skew = Date.parse(t.now) - Date.now(); render();
+    }
+    await load();
+    setInterval(clock, 1000);
+    setInterval(() => { if (t?.status === "live" && !document.hidden) load(); }, 15000); // live standings
+  </script>
+</body>
+</html>

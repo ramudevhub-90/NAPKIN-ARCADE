@@ -12,7 +12,7 @@
   <header class="top">
     <div class="brand"><a class="logo" href="/" aria-label="Napkin Arcade home"><img class="mark" src="/logo.svg" alt="" width="46" height="46"></a><div><h1>Napkin <b>Arcade</b></h1><p>Draw a game or describe it. An AI studio builds it in 3D — and plays it until it's fun.</p></div></div>
     <div class="userbar">
-      <nav class="navpill" aria-label="Studio"><a href="#mine" class="ub"><span class="ic">🎮</span>My games</a><a href="#groups" class="ub"><span class="ic">👥</span>Groups</a><a href="/studio/feedback" class="ub"><span class="ic">📬</span>Feedback<span class="n hidden" id="inboxCount"></span></a><a href="/" class="ub"><span class="ic">🏠</span>Home</a></nav>
+      <nav class="navpill" aria-label="Studio"><a href="#mine" class="ub"><span class="ic">🎮</span>My games</a><a href="#groups" class="ub"><span class="ic">👥</span>Groups</a><a href="#tournaments" class="ub"><span class="ic">🏆</span>Tournaments</a><a href="/studio/feedback" class="ub"><span class="ic">📬</span>Feedback<span class="n hidden" id="inboxCount"></span></a><a href="/" class="ub"><span class="ic">🏠</span>Home</a></nav>
       <div class="me" id="me" hidden><span class="av" id="avatar"></span><span class="who"><b id="who"></b><span class="builds"><i id="buildsBar"></i></span><small id="buildsText"></small></span><button id="logout" class="out" title="Sign out" aria-label="Sign out">⎋</button></div>
     </div>
     <div class="meter"><span id="mode" class="badge">…</span></div>
@@ -60,6 +60,25 @@
     <div id="groupList" class="mygames"></div>
     <form id="newGroup" class="newgroup"><input type="text" id="groupName" maxlength="40" placeholder="Group name — e.g. Friday Racing Club" required><input type="text" id="groupAbout" maxlength="240" placeholder="What's it about? (optional)"><button class="primary" id="groupCreate">＋ Create group</button></form>
     <p class="hint" id="groupErr"></p>
+  </section>
+  <section id="tournaments" class="studio"><h2>Tournaments</h2><p class="muted" style="margin:-4px 0 12px;font-size:14px">Host a tournament on any game: set the time window and the prize (0 is fine), share the link, and watch the leaderboard.</p>
+    <div id="tourList" class="mygames"></div>
+    <details class="hostbox" id="hostBox"><summary>🏆 Host a tournament</summary>
+      <form id="hostForm" class="hostform">
+        <label>Name<input type="text" id="tName" maxlength="60" placeholder="e.g. Diwali Night Cab Cup" required></label>
+        <label>Game<select id="tGame" required></select></label>
+        <label class="wide">About (optional)<input type="text" id="tAbout" maxlength="400" placeholder="Rules, theme, anything players should know"></label>
+        <label>Starts<input type="datetime-local" id="tStart" required></label>
+        <label>Ends<input type="datetime-local" id="tEnd" required></label>
+        <label>Who can enter<select id="tAccess"></select></label>
+        <label>Prize money<span class="money"><select id="tCur" aria-label="Currency"></select><input type="number" id="tAmount" min="0" step="1" value="0"></span></label>
+        <label>Split<select id="tSplit"><option value="all">Winner takes all</option><option value="60-40">1st 60% · 2nd 40%</option><option value="50-30-20">1st 50% · 2nd 30% · 3rd 20%</option></select></label>
+        <label>Prize note (optional)<input type="text" id="tNote" maxlength="140" placeholder="e.g. Paid by UPI within 2 days"></label>
+        <p class="hint wide">Prize money can be 0. Payouts happen outside Napkin Arcade — you pay the winners directly.</p>
+        <button class="primary wide" id="tCreate">🏆 Host tournament</button>
+        <p class="hint wide err" id="tErr"></p>
+      </form>
+    </details>
   </section>
   <section id="shared" class="studio" hidden><h2>Shared with me</h2><p class="muted" style="margin:-6px 0 10px;font-size:14px">Private games from creators who added you to their circle.</p><div id="sharedGames" class="mygames"></div></section>
   <iframe id="lab" sandbox="allow-scripts" title="Test lab" hidden></iframe>

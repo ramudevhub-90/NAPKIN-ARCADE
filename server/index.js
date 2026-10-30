@@ -142,6 +142,32 @@ async function canPlay(req, meta) {
 }
 const PUBLIC_URL = () => (process.env.PUBLIC_URL || "https://napkinarcade.revenuerush.in").replace(/\/$/, "");
 const inviteHits = new Map(); // sub -> timestamps (group email invites)
+
+// ---- tournaments ----
+const EXAMPLE_TITLES = { runner: "Neon Cab Rush", flyer: "Ring Rider", arena: "Star Pup Panic", skier: "Frost Fall", meteors: "Meteor Mayhem", reef: "Reef Rush" };
+const SPLITS = { all: [100], "60-40": [60, 40], "50-30-20": [50, 30, 20] };
+const tourStatus = (t, now = Date.now()) => (now < Date.parse(t.startsAt) ? "upcoming" : now < Date.parse(t.endsAt) ? "live" : "ended");
+const runHits = new Map(); // sub -> last tournament run time
+// Who may enter: anyone signed in (link tournaments) or members of the tournament's group.
+async function tourAccess(t, user) {
+  if (!user) return { ok: false, reason: "signin" };
+  if (t.access === "group" && !(await store.groupMember(t.groupId, user.sub))) return { ok: false, reason: "group" };
+  return { ok: true };
+}
+async function tourView(t, user) {
+  const [{ ranked, waiting }, entry, access, group] = await Promise.all([store.tournamentStandings(t.tid), store.tournamentEntry(t.tid, user?.sub), tourAccess(t, user), t.access === "group" ? store.getGroup(t.groupId) : null]);
+  const status = tourStatus(t), split = SPLITS[t.prize?.split] || SPLITS.all;
+  const myRank = entry ? ranked.findIndex((e) => e.sub === user.sub) + 1 || null : null;
+  return {
+    code: t.code, tid: t.tid, name: t.name, about: t.about, hostName: t.hostName, host: !!user && user.sub === t.host,
+    game: t.game, startsAt: t.startsAt, endsAt: t.endsAt, status, now: new Date().toISOString(),
+    prize: { amount: t.prize?.amount || 0, currency: t.prize?.currency || "INR", note: t.prize?.note || "", split, places: split.map((pct) => Math.round(((t.prize?.amount || 0) * pct) / 100)) },
+    access: t.access, group: group ? { name: group.name, gid: group.gid } : null, entrants: ranked.length + waiting.length,
+    standings: ranked.slice(0, 100).map((e, i) => ({ rank: i + 1, name: e.name, score: e.best.score, progress: e.best.progress, won: e.best.won, time: e.best.time, runs: e.runs || 0, you: !!user && e.sub === user.sub })),
+    you: { signedIn: !!user, entered: !!entry, best: entry?.best || null, runs: entry?.runs || 0, rank: myRank, canEnter: access.ok, reason: access.reason || null },
+    url: `${PUBLIC_URL()}/t/${t.code}`,
+  };
+}
 const knownGame = async (req, g) => {
   if (/^example-[a-z]+$/.test(g || "")) return true;
   const meta = /^[a-z0-9]+$/.test(g || "") && (await store.getGame(g));
@@ -272,6 +298,79 @@ const server = http.createServer(async (req, res) => {
         members: members.map((m) => ({ sub: m.sub, name: m.name, role: m.role, at: m.at, you: m.sub === user.sub })).sort((a, b) => (a.role === "owner" ? -1 : b.role === "owner" ? 1 : a.at < b.at ? -1 : 1)),
         games: games.map(gameCard),
       });
+    }
+    // ---- tournaments ----
+    if (url.pathname === "/api/tournaments" && req.method === "POST") {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in to host a tournament." });
+      const b = await body(req, 6e3);
+      const name = String(b.name || "").replace(/[<>]/g, "").trim().slice(0, 60), about = String(b.about || "").replace(/[<>]/g, "").trim().slice(0, 400);
+      if (name.length < 3) return json(res, 400, { error: "Give the tournament a name." });
+      const start = Date.parse(b.startsAt), end = Date.parse(b.endsAt);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return json(res, 400, { error: "Pick a start and an end time." });
+      if (start < Date.now() - 10 * 60e3) return json(res, 400, { error: "The start time is in the past." });
+      if (end - start < 10 * 60e3) return json(res, 400, { error: "A tournament has to run for at least 10 minutes." });
+      if (end - start > 90 * 864e5) return json(res, 400, { error: "A tournament can run for up to 90 days." });
+      const amount = Math.round(+b.prize?.amount || 0);
+      if (!(amount >= 0 && amount <= 1e8)) return json(res, 400, { error: "Prize money must be 0 or more." });
+      const prize = { amount, currency: /^[A-Z]{3}$/.test(String(b.prize?.currency || "").toUpperCase()) ? String(b.prize.currency).toUpperCase() : "USD" /* any ISO 4217 code */, split: SPLITS[b.prize?.split] ? b.prize.split : "all", note: String(b.prize?.note || "").replace(/[<>]/g, "").trim().slice(0, 140) };
+      // The game: a showcase game, or a ready game whose players can all reach it.
+      const gameId = String(b.gameId || ""), ex = /^example-([a-z]+)$/.exec(gameId);
+      let game, access = b.access === "group" ? "group" : "link", groupId = null;
+      if (access === "group") {
+        groupId = String(b.groupId || "");
+        if (!(await store.groupMember(groupId, user.sub))) return json(res, 403, { error: "You can only run tournaments for groups you're in." });
+      }
+      if (ex && EXAMPLE_TITLES[ex[1]]) game = { id: gameId, title: EXAMPLE_TITLES[ex[1]] };
+      else {
+        const meta = /^[a-z0-9]+$/.test(gameId) && (await store.getGame(gameId));
+        if (meta?.status !== "ready") return json(res, 400, { error: "Pick a game that's ready to play." });
+        const vis = meta.visibility || "public";
+        if (vis === "circle") return json(res, 400, { error: "That game is circle-only. Make it public, or share it with a group and run the tournament for that group." });
+        if (vis === "group" && !(access === "group" && groupId === meta.groupId)) return json(res, 400, { error: "That game belongs to a group — run the tournament for that group." });
+        game = { id: meta.id, title: meta.title || "Untitled game" };
+      }
+      if ((await store.myTournaments(user.sub)).filter((l) => l.role === "host").length >= 50) return json(res, 400, { error: "You can host up to 50 tournaments." });
+      const t = await store.createTournament(user, { name, about, game, startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString(), prize, access, groupId });
+      return json(res, 200, { code: t.code });
+    }
+    if (url.pathname === "/api/my/tournaments") {
+      const user = await currentUser(req);
+      if (!user) return json(res, 401, { error: "Please sign in." });
+      const links = await store.myTournaments(user.sub);
+      const tours = (await Promise.all(links.map((l) => store.getTournament(l.tid)))).filter(Boolean);
+      return json(res, 200, { tournaments: tours.map((t) => ({ code: t.code, name: t.name, game: t.game, status: tourStatus(t), startsAt: t.startsAt, endsAt: t.endsAt, entrants: t.entrants || 0, prize: t.prize, host: t.host === user.sub })).sort((a, b) => ({ live: 0, upcoming: 1, ended: 2 })[a.status] - ({ live: 0, upcoming: 1, ended: 2 })[b.status] || (a.endsAt < b.endsAt ? -1 : 1)) });
+    }
+    if (parts[0] === "api" && parts[1] === "t" && parts[2]) {
+      const t = await store.tournamentByCode(parts[2]);
+      if (!t) return json(res, 404, { error: "This tournament link isn't valid." });
+      const user = await currentUser(req);
+      if (parts[3] === "score" && req.method === "POST") {
+        if (!user) return json(res, 401, { error: "Sign in to compete." });
+        if (tourStatus(t) !== "live") return json(res, 400, { error: tourStatus(t) === "upcoming" ? "The tournament hasn't started yet." : "The tournament has ended." });
+        if (!(await store.tournamentEntry(t.tid, user.sub))) return json(res, 403, { error: "Enter the tournament first." });
+        const last = runHits.get(user.sub) || 0;
+        if (Date.now() - last < 5000) return json(res, 429, { error: "Slow down a little." });
+        runHits.set(user.sub, Date.now());
+        const b = await body(req, 2e3);
+        const run = { score: Math.max(0, Math.min(1e7, Math.round(+b.score || 0))), progress: Math.max(0, Math.min(1, +b.progress || 0)), won: b.won ? 1 : 0, time: Math.max(0, Math.min(3600, +(+b.time || 0).toFixed(1))) };
+        const improved = await store.recordTournamentRun(t.tid, user.sub, run);
+        return json(res, 200, { improved, ...(await tourView(t, user)) });
+      }
+      if (req.method === "POST") {
+        const action = (await body(req, 1e3)).action;
+        if (action === "enter") {
+          const a = await tourAccess(t, user);
+          if (!a.ok) return json(res, a.reason === "signin" ? 401 : 403, { error: a.reason === "signin" ? "Sign in to enter." : "This tournament is for members of its group." });
+          if (tourStatus(t) === "ended") return json(res, 400, { error: "The tournament has ended." });
+          await store.enterTournament(t, user);
+        } else if (action === "end") {
+          if (!user || user.sub !== t.host) return json(res, 403, { error: "Only the host can end the tournament." });
+          if (tourStatus(t) !== "ended") { await store.endTournamentNow(t.tid); t.endsAt = new Date().toISOString(); }
+        } else return json(res, 400, { error: "Unknown action." });
+        return json(res, 200, await tourView(await store.getTournament(t.tid), user));
+      }
+      return json(res, 200, await tourView(t, user));
     }
     // Join links: anyone can preview a group; signing in lets them join.
     if (parts[0] === "api" && parts[1] === "join" && parts[2]) {
@@ -480,6 +579,7 @@ const server = http.createServer(async (req, res) => {
       return page("inbox.html");
     }
     if (parts[0] === "g" && /^[A-Za-z0-9]{8}$/.test(parts[1] || "")) return page("join.html");
+    if (parts[0] === "t" && /^[A-Za-z0-9]{8}$/.test(parts[1] || "")) return page("tournament.html");
     if (parts[0] === "studio" && parts[1] === "groups" && /^[a-f0-9]{10}$/.test(parts[2] || "")) {
       if (!(await currentUser(req))) { res.writeHead(302, { Location: `/login?next=${encodeURIComponent(url.pathname)}` }); return res.end(); }
       return page("group.html");

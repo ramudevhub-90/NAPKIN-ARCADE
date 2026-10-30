@@ -7,6 +7,10 @@
 //   GROUP#<gid>     GAME#<id>               a game shared with the group
 //   USER#<sub>      GROUP#<gid>             the groups a person belongs to
 //   JOIN#<code>     GROUP                   join-link lookup
+//   TOUR#<tid>      META                    name, host, game, startsAt/endsAt, prize, access (link | group), code
+//   TOUR#<tid>      ENTRY#<sub>             an entrant and their best run
+//   USER#<sub>      TOUR#<tid>              tournaments a person hosts or entered
+//   TJOIN#<code>    TOUR                    tournament link lookup
 //   GAME#<id>       META                    owner, title, version, status, visibility, changelog… (GSI1: OWNER#<sub>, GSI2: GALLERY when public)
 //   GAME#<id>       VERSION#0001            summary, score, at (payload in S3: games/<id>/v1.json)
 //   GAME#<id>       CHAT#<ts>#<rand>        role, text, version…
@@ -182,6 +186,58 @@ export async function resetGroupLink(g) {
 export async function groupGames(gid) {
   const metas = await Promise.all((await queryPrefix(`GROUP#${gid}`, "GAME#")).map((l) => getGame(l.id)));
   return metas.filter((m) => m && m.status === "ready" && m.visibility === "group" && m.groupId === gid);
+}
+
+// ---- tournaments: a game, a time window, a prize and their own leaderboard ----
+export const getTournament = (tid) => getItem(`TOUR#${tid}`, "META");
+export async function tournamentByCode(code) {
+  const link = /^[A-Za-z0-9]{8}$/.test(code || "") && (await getItem(`TJOIN#${code}`, "TOUR"));
+  return link ? getTournament(link.tid) : null;
+}
+export async function createTournament(host, t) {
+  const tid = newId(5), code = joinCode(), at = new Date().toISOString();
+  const item = { pk: `TOUR#${tid}`, sk: "META", tid, code, host: host.sub, hostName: host.name, entrants: 0, createdAt: at, ...t };
+  await putItem(item);
+  await putItem({ pk: `TJOIN#${code}`, sk: "TOUR", tid });
+  await putItem({ pk: `USER#${host.sub}`, sk: `TOUR#${tid}`, tid, role: "host", at });
+  return item;
+}
+export const tournamentEntry = (tid, sub) => (sub ? getItem(`TOUR#${tid}`, `ENTRY#${sub}`) : null);
+export async function enterTournament(t, user) {
+  if (await tournamentEntry(t.tid, user.sub)) return false;
+  const at = new Date().toISOString();
+  await putItem({ pk: `TOUR#${t.tid}`, sk: `ENTRY#${user.sub}`, sub: user.sub, name: user.name, best: null, runs: 0, at });
+  await putItem({ pk: `USER#${user.sub}`, sk: `TOUR#${t.tid}`, tid: t.tid, role: "player", at });
+  await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `TOUR#${t.tid}`, sk: "META" }, UpdateExpression: "ADD entrants :one", ExpressionAttributeValues: { ":one": 1 } }));
+  return true;
+}
+// Keep each player's best run (higher score; ties go to the faster run). Returns true when it improved.
+export async function recordTournamentRun(tid, sub, run) {
+  const now = new Date().toISOString();
+  try {
+    await db.send(new UpdateCommand({
+      TableName: TABLE, Key: { pk: `TOUR#${tid}`, sk: `ENTRY#${sub}` },
+      UpdateExpression: "SET best = :b, bestAt = :t ADD runs :one",
+      ConditionExpression: "attribute_exists(sk) AND (attribute_not_exists(best) OR best = :null OR best.score < :s OR (best.score = :s AND best.#time > :tm))",
+      ExpressionAttributeNames: { "#time": "time" },
+      ExpressionAttributeValues: { ":b": run, ":t": now, ":one": 1, ":null": null, ":s": run.score, ":tm": run.time },
+    }));
+    return true;
+  } catch (e) {
+    if (e.name !== "ConditionalCheckFailedException") throw e;
+    await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `TOUR#${tid}`, sk: `ENTRY#${sub}` }, UpdateExpression: "ADD runs :one", ConditionExpression: "attribute_exists(sk)", ExpressionAttributeValues: { ":one": 1 } })).catch(() => {});
+    return false;
+  }
+}
+// Standings: everyone who has a run, best first (score, then time, then who got there first).
+export async function tournamentStandings(tid) {
+  const entries = await queryPrefix(`TOUR#${tid}`, "ENTRY#");
+  const ranked = entries.filter((e) => e.best).sort((a, b) => b.best.score - a.best.score || a.best.time - b.best.time || (a.bestAt < b.bestAt ? -1 : 1));
+  return { ranked, waiting: entries.filter((e) => !e.best) };
+}
+export const myTournaments = (sub) => queryPrefix(`USER#${sub}`, "TOUR#");
+export async function endTournamentNow(tid) {
+  await db.send(new UpdateCommand({ TableName: TABLE, Key: { pk: `TOUR#${tid}`, sk: "META" }, UpdateExpression: "SET endsAt = :n", ExpressionAttributeValues: { ":n": new Date().toISOString() } }));
 }
 
 // ---- versions / chat / feedback ----

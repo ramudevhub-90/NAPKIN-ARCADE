@@ -22,6 +22,9 @@
     .btn { font: 15px "Russo One", sans-serif; color: #fff; border: 0; border-radius: 12px; padding: 11px 16px; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--orange)); box-shadow: 0 8px 24px rgba(255,47,160,.35); }
     .btn.ghost { background: rgba(255,255,255,.08); box-shadow: none; border: 1px solid var(--line); font: 600 14px Inter, sans-serif; }
     #friends { position: fixed; left: 16px; bottom: 16px; z-index: 5; }
+    #tourBar { position: fixed; left: 50%; top: 52px; transform: translateX(-50%); z-index: 7; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; font: 600 13px Inter, sans-serif; text-decoration: none; color: var(--ink); max-width: calc(100vw - 32px); }
+    #tourBar b { font: 13px "Russo One", sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } #tourBar .pill { padding: 3px 9px; border-radius: 99px; background: rgba(255,47,160,.2); border: 1px solid rgba(255,47,160,.55); font-size: 12px; white-space: nowrap; }
+    #tourBar .cta { background: linear-gradient(135deg, var(--pink), var(--orange)); color: #fff; border-radius: 99px; padding: 4px 11px; font-size: 12px; white-space: nowrap; }
     #tools { position: fixed; left: 16px; bottom: 68px; z-index: 5; display: flex; gap: 8px; }
     #tools .btn { padding: 9px 13px; }
     #lb { position: fixed; right: 16px; top: 70px; z-index: 6; width: 300px; padding: 12px 14px; max-height: calc(100vh - 120px); overflow: auto; }
@@ -70,6 +73,7 @@
 <body>
   <iframe id="g" sandbox="allow-scripts" allow="autoplay; fullscreen" title="Game"></iframe>
   <button id="friends" class="btn">👥 Play with friends</button>
+  <a id="tourBar" class="glass hidden"></a>
   <div id="tools"><button id="fs" class="btn ghost" title="Fullscreen">⤢</button><button id="lbBtn" class="btn ghost" title="Leaderboard">🏆 Leaderboard</button><button id="fbBtn" class="btn ghost hidden" title="Send feedback to the game's creator">💬 Feedback</button></div>
   <div id="lock" class="overlay hidden" style="z-index:30"><div class="glass panel" style="text-align:center">
     <h2 id="lockTitle">🔒 Private game</h2><p class="muted" id="lockText"></p>
@@ -221,7 +225,31 @@
       const k = j.ranks || {};
       $("lbMsg").textContent = k.all && k.all <= 10 ? `You're #${k.all} in the world, all time! 🎉` : k.week && k.week <= 10 ? `You're #${k.week} in the world this week! 🎉` : k.countryWeek && k.countryWeek <= 10 ? `You're #${k.countryWeek} in ${flag(country)} ${regionName(country)} this week! 🎉` : k.week ? `This week: #${k.week} worldwide${k.countryWeek ? ` · #${k.countryWeek} in ${regionName(country)}` : ""}` : "";
     }
+    // ---- Tournament mode (/play/<game>?tour=<code>): every finished run counts toward the tournament ----
+    const tourCode = /^[A-Za-z0-9]{8}$/.test(params.get("tour") || "") ? params.get("tour") : null;
+    let tour = null;
+    function renderTour() {
+      if (!tour || tour.game?.id !== id) return $("tourBar").classList.add("hidden");
+      const you = tour.you, left = Math.max(0, Date.parse(tour.endsAt) - Date.now()), h = Math.floor(left / 36e5), m = Math.floor(left / 6e4) % 60;
+      const state = tour.status === "live" ? `ends in ${h ? h + "h " : ""}${m}m` : tour.status === "upcoming" ? "starts soon" : "ended";
+      const me = tour.status === "ended" ? '<span class="cta">See results</span>' : !you.signedIn ? '<span class="cta">Sign in to compete</span>' : !you.entered ? '<span class="cta">Enter</span>' : `<span class="pill">best ${you.best ? you.best.score : "—"}${you.rank ? ` · #${you.rank}` : ""}</span>`;
+      $("tourBar").innerHTML = `🏆 <b>${esc(tour.name)}</b><span class="pill">${state}</span>${me}`;
+      $("tourBar").href = you.signedIn || tour.status === "ended" ? `/t/${tour.code}` : `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+      $("tourBar").classList.remove("hidden");
+    }
+    async function loadTour() { if (!tourCode) return; const r = await fetch(`/api/t/${tourCode}`).catch(() => null); if (r?.ok) { tour = await r.json(); renderTour(); } }
+    loadTour(); setInterval(renderTour, 30e3);
+    async function submitTour(result) {
+      if (!tour || tour.game?.id !== id || tour.status !== "live" || !tour.you.entered) return;
+      const r = await fetch(`/api/t/${tourCode}/score`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(result) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return toast(j.error || "Couldn't post your tournament score.");
+      tour = j; renderTour();
+      toast(j.improved ? `🏆 New best in ${j.name}: ${j.you.best.score}${j.you.rank ? ` — you're #${j.you.rank}` : ""}!` : `🏆 ${j.name}: your best is still ${j.you.best.score}${j.you.rank ? ` (#${j.you.rank})` : ""}`);
+    }
+
     async function onGameEnd(result) {
+      if (!ws) submitTour(result);
       if (result.score > getBest()) { try { localStorage.setItem(bestKey, result.score); } catch {} }
       toGame({ cmd: "best", score: getBest() });
       if (ws) return; // multiplayer shows its own podium

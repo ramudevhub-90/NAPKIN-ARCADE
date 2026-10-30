@@ -234,10 +234,47 @@ async function loadMe() {
   if (projects.length) $("myGames").innerHTML = projects.map((p) => `<a href="${p.ready ? `/studio/game/${p.id}` : "#"}"><b>${esc(p.title || (p.status === "failed" ? "Build failed" : "Building…"))}</b><span>${esc(p.tagline || p.idea)}</span><span>${new Date(p.created).toLocaleString()}${p.ready ? ` · v${p.version}` : ""}${p.score != null ? ` · fun ${p.score}` : ""}${p.visibility === "circle" ? " · 🔒 circle only" : ""}${p.pendingFeedback ? ` · <b style="color:var(--accent)">📬 ${p.pendingFeedback} new feedback</b>` : ""}</span></a>`).join("");
   const { groups = [] } = await (await fetch("/api/my/groups")).json();
   $("groupList").innerHTML = groups.map((g) => `<a href="/studio/groups/${g.gid}"><b>👥 ${esc(g.name)}</b><span>${esc(g.about || "")}</span><span>${g.members} ${g.members === 1 ? "member" : "members"} · ${g.owner ? "you run it" : "run by " + esc(g.ownerName)}</span></a>`).join("");
+  renderTournaments(projects, groups);
   const { games: shared = [] } = await (await fetch("/api/shared")).json();
   $("shared").hidden = !shared.length;
   $("sharedGames").innerHTML = shared.map((p) => `<a href="/play/${p.id}"><b>${esc(p.title || "Untitled game")}</b><span>${esc(p.tagline || p.idea)}</span><span>🔒 by ${esc(p.by)}${p.score != null ? ` · fun ${p.score}` : ""}</span></a>`).join("");
 }
+// ---- tournaments ----
+const SHOWCASE = [["example-runner", "Neon Cab Rush"], ["example-flyer", "Ring Rider"], ["example-arena", "Star Pup Panic"], ["example-skier", "Frost Fall"], ["example-meteors", "Meteor Mayhem"], ["example-reef", "Reef Rush"]];
+const money = (n, cur) => { try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(n); } catch { return `${cur} ${n}`; } };
+const localInput = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+// Any currency: the visitor's own first, then the common ones, then every ISO currency by name.
+const REGION_CURRENCY = { IN: "INR", US: "USD", GB: "GBP", AE: "AED", SG: "SGD", AU: "AUD", CA: "CAD", JP: "JPY", CN: "CNY", HK: "HKD", KR: "KRW", ID: "IDR", MY: "MYR", PH: "PHP", TH: "THB", VN: "VND", PK: "PKR", BD: "BDT", LK: "LKR", NP: "NPR", SA: "SAR", QA: "QAR", KW: "KWD", BH: "BHD", OM: "OMR", ZA: "ZAR", NG: "NGN", KE: "KES", EG: "EGP", BR: "BRL", MX: "MXN", AR: "ARS", CL: "CLP", CO: "COP", NZ: "NZD", CH: "CHF", SE: "SEK", NO: "NOK", DK: "DKK", PL: "PLN", TR: "TRY", RU: "RUB", IL: "ILS", UA: "UAH" };
+const EURO = "AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK".split(" ");
+function fillCurrencies() {
+  if ($("tCur").options.length) return;
+  const region = (navigator.languages || []).map((l) => /-([A-Z]{2})$/i.exec(l)?.[1]?.toUpperCase()).find(Boolean) || ((Intl.DateTimeFormat().resolvedOptions().timeZone || "").startsWith("Asia/Kolkata") || (Intl.DateTimeFormat().resolvedOptions().timeZone || "").startsWith("Asia/Calcutta") ? "IN" : "US");
+  const mine = EURO.includes(region) ? "EUR" : REGION_CURRENCY[region] || "USD";
+  let all = []; try { all = Intl.supportedValuesOf("currency"); } catch { all = ["USD", "EUR", "GBP", "INR", "JPY"]; }
+  let names; try { const d = new Intl.DisplayNames(["en"], { type: "currency" }); names = (c) => d.of(c) || c; } catch { names = (c) => c; }
+  const top = [...new Set([mine, "USD", "EUR", "GBP", "INR", "AED", "SGD", "JPY", "AUD", "CAD"])];
+  const opt = (c) => `<option value="${c}">${c} · ${esc(names(c))}</option>`;
+  $("tCur").innerHTML = `<optgroup label="Popular">${top.map(opt).join("")}</optgroup><optgroup label="All currencies">${all.filter((c) => !top.includes(c)).sort((a, b) => names(a).localeCompare(names(b))).map(opt).join("")}</optgroup>`;
+  $("tCur").value = mine;
+}
+async function renderTournaments(projects, groups) {
+  fillCurrencies();
+  const mine = projects.filter((p) => p.ready);
+  $("tGame").innerHTML = (mine.length ? `<optgroup label="Your games">${mine.map((p) => `<option value="${p.id}">${esc(p.title || "Untitled game")}${p.visibility !== "public" ? ` (${p.visibility === "group" ? "group game" : "circle-only"})` : ""}</option>`).join("")}</optgroup>` : "") + `<optgroup label="Showcase games">${SHOWCASE.map(([id, t]) => `<option value="${id}">${t}</option>`).join("")}</optgroup>`;
+  $("tAccess").innerHTML = '<option value="link">Anyone with the link</option>' + groups.map((g) => `<option value="group:${g.gid}">Only ${esc(g.name)} members</option>`).join("");
+  if (!$("tStart").value) { const now = new Date(Date.now() + 5 * 60e3); $("tStart").value = localInput(now); $("tEnd").value = localInput(new Date(now.getTime() + 7 * 864e5)); }
+  const { tournaments = [] } = await (await fetch("/api/my/tournaments")).json();
+  $("tourList").innerHTML = tournaments.map((t) => `<a class="tour" href="/t/${t.code}"><span class="st ${t.status}">${t.status}</span><b>🏆 ${esc(t.name)}</b><span>🎮 ${esc(t.game.title)}</span><span>${t.prize?.amount ? money(t.prize.amount, t.prize.currency) : "Bragging rights"} · ${t.entrants} ${t.entrants === 1 ? "player" : "players"} · ${t.host ? "you host" : "you're in"}</span></a>`).join("");
+}
+$("hostForm").onsubmit = async (e) => {
+  e.preventDefault(); $("tErr").textContent = ""; $("tCreate").disabled = true;
+  const [access, groupId] = $("tAccess").value.split(":");
+  const body = { name: $("tName").value, about: $("tAbout").value, gameId: $("tGame").value, startsAt: new Date($("tStart").value).toISOString(), endsAt: new Date($("tEnd").value).toISOString(), access, groupId, prize: { amount: +$("tAmount").value || 0, currency: $("tCur").value, split: $("tSplit").value, note: $("tNote").value } };
+  const r = await fetch("/api/tournaments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (r.ok) return (location.href = `/t/${j.code}`);
+  $("tErr").textContent = j.error || "Couldn't create the tournament."; $("tCreate").disabled = false;
+};
 $("newGroup").onsubmit = async (e) => {
   e.preventDefault(); $("groupErr").textContent = ""; $("groupCreate").disabled = true;
   const r = await fetch("/api/groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: $("groupName").value, about: $("groupAbout").value }) });
