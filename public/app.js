@@ -82,6 +82,21 @@ function buildTeam() {
   $("team").innerHTML = Object.entries(AGENTS).map(([id, [n, m]]) => `<div class="agent" id="agent-${id}"><div class="h">${n}<span class="dot"></span></div><div class="m">${m}</div><div class="t">Waiting…</div></div>`).join("");
 }
 const scores = [];
+// The studio board fills the screen until the first playable build: idea → design → 3D models + reviews.
+const board = { idea: "", design: null, models: [], reviews: {}, round: 0 };
+function renderBoard() {
+  const b = $("board"), d = board.design;
+  if (!d) { b.innerHTML = `<span class="kick">Your idea</span><h3>${esc(board.idea || "Your drawing")}</h3><div class="wait"><i></i>The creative director (Nemotron 3 Ultra) is designing the game…</div>`; return; }
+  const cast = [{ name: d.player?.name, role: "player" }, ...(d.entities || [])].filter((x) => x?.name).slice(0, 10);
+  const models = board.models.length ? `<div class="models">${board.models.map((m) => { const r = board.reviews[m.name]; return `<figure><img src="${m.image}" alt="">${r ? `<span class="sc" style="color:${r >= 7 ? "var(--green)" : "var(--amber)"}">${r}/10</span>` : ""}<figcaption>${esc(m.name)}</figcaption></figure>`; }).join("")}</div>` : `<div class="wait"><i></i>The 3D artist is building the models…</div>`;
+  b.innerHTML = `<span class="kick">Game design · ${esc(d.template || "")}</span><h3>${esc(d.title)}</h3><p class="tagline">${esc(d.tagline || "")}</p>
+    <div class="cols"><div class="box"><b>Stages</b><ol>${(d.stages || []).slice(0, 3).map((x) => `<li>${esc(x)}</li>`).join("")}</ol>${d.twist ? `<b style="margin-top:10px">Twist</b>${esc(d.twist)}` : ""}<b style="margin-top:10px">Cast</b><div class="cast">${cast.map((x) => `<span class="${esc(x.role)}">${esc(x.name)}</span>`).join("")}</div></div>
+    <div class="box"><b>3D models${board.round > 1 ? " · revised after review" : ""}</b>${models}</div></div>`;
+}
+function emptyPanels() {
+  if (!scores.length) $("scores").innerHTML = '<p class="placeholder">Fun scores appear after the first bot playtest.</p>';
+  if (!$("levels").textContent.trim()) $("levels").innerHTML = '<p class="placeholder">15 bots (novice, casual, expert) play every build.</p>';
+}
 function renderScores() { $("scores").innerHTML = scores.map((s) => `<div class="bar"><b>${s.total}</b><i style="height:${Math.max(4, s.total)}%"></i>Build ${s.build}</div>`).join(""); }
 function renderReport(rep, build) {
   $("levels").innerHTML = `<div class="muted" style="font-size:12px">Build ${build}</div>` + ["novice", "casual", "expert"].filter((k) => rep[k]).map((k) => {
@@ -172,12 +187,12 @@ async function playtest({ payload, personas }) {
 function onEvent(e) {
   switch (e.type) {
     case "agent": setAgent(e.agent, e.state, e.text); log(`<b>${AGENTS[e.agent]?.[0] || e.agent}:</b> ${esc(e.text)}`); break;
-    case "design": design = e.design; $("screenLabel").textContent = `“${design.title}” — ${design.tagline}`; break;
+    case "design": design = e.design; board.design = e.design; renderBoard(); $("screenLabel").textContent = `“${design.title}” — ${design.tagline}`; break;
     case "code": showCode(e.code, e.note); break;
-    case "modelshots": if (e.images.length) log(`<b>🧊 3D models${e.round > 1 ? " (revised)" : ""}:</b><div class="shots">${e.images.map((m) => `<figure><img src="${m.image}" alt=""><figcaption>${esc(m.name)}</figcaption></figure>`).join("")}</div>`); break;
-    case "modelreviews": log(`<b>🎨 Art review:</b> ${e.reviews.map((r) => `${esc(r.name)} ${r.score}/10${r.problems.length ? ` — ${esc(r.problems.slice(0, 2).join("; "))}` : ""}`).join("<br>")}`); break;
+    case "modelshots": if (e.images.length) { board.models = e.images; board.round = e.round || 1; renderBoard(); } if (e.images.length) log(`<b>🧊 3D models${e.round > 1 ? " (revised)" : ""}:</b><div class="shots">${e.images.map((m) => `<figure><img src="${m.image}" alt=""><figcaption>${esc(m.name)}</figcaption></figure>`).join("")}</div>`); break;
+    case "modelreviews": for (const r of e.reviews) board.reviews[r.name] = r.score; renderBoard(); log(`<b>🎨 Art review:</b> ${e.reviews.map((r) => `${esc(r.name)} ${r.score}/10${r.problems.length ? ` — ${esc(r.problems.slice(0, 2).join("; "))}` : ""}`).join("<br>")}`); break;
     case "qa": log(e.ok ? "✅ <b>QA:</b> build runs" : `🐞 <b>QA found a bug:</b> ${esc(e.problem)}`, e.ok ? "" : "err"); break;
-    case "build": $("buildChip").textContent = `Build ${e.build}`; showOnScreen(e.payload, `“${e.payload.title}” — build ${e.build} (bot preview)`); break;
+    case "build": $("board").classList.add("off"); $("buildChip").textContent = `Build ${e.build}`; showOnScreen(e.payload, `“${e.payload.title}” — build ${e.build} (bot preview)`); break;
     case "swarm": renderReport(e.report, e.build); break;
     case "score": scores.push(e); renderScores(); break;
     case "review": log(`<b>🧭 Diagnosis:</b> ${e.diagnosis.map(esc).join(" ")}`); break;
@@ -207,6 +222,7 @@ $("build").onclick = async () => {
   $("build").disabled = true; $("hint").textContent = "";
   $("studio").classList.remove("hidden"); buildTeam(); scores.length = 0; renderScores(); codeNotes = [];
   $("log").innerHTML = ""; $("thoughts").innerHTML = ""; $("levels").innerHTML = ""; $("final").classList.add("hidden"); $("codeBox").hidden = true;
+  Object.assign(board, { idea, design: null, models: [], reviews: {}, round: 0 }); renderBoard(); $("board").classList.remove("off"); emptyPanels();
   await Promise.all([resetLab(), resetScreen()]);
   const r = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idea, image }) });
   const j = await r.json();

@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="/style.css">
   <style>
     .ws { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 16px; padding: 16px 20px 32px; max-width: 1400px; margin: 0 auto; }
+    /* The studio chat stays in view while the game, sharing and publishing panels scroll past. */
+    .ws > section.card { position: sticky; top: 84px; align-self: start; max-height: calc(100vh - 100px); overflow-y: auto; }
     .card { background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 20px; padding: 16px; min-width: 0; box-shadow: 0 24px 60px rgba(0,0,0,.3); }
     .titlebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
     .titlebar h2 { margin: 0; font: 22px var(--display); text-transform: none; letter-spacing: .2px; color: var(--ink); }
@@ -73,7 +75,7 @@
     .members span { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: var(--panel2); border-radius: 99px; padding: 4px 6px 4px 12px; }
     .members button { border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 4px; }
     .kind { font-size: 11px; } .kind.bug { color: var(--red); } .kind.idea { color: var(--blue); }
-    @media (max-width: 960px) { .ws { grid-template-columns: 1fr; } .chat { height: 340px; } }
+    @media (max-width: 960px) { .ws { grid-template-columns: 1fr; } .chat { height: 340px; } .ws > section.card { position: static; max-height: none; } }
   </style>
 </head>
 <body>
